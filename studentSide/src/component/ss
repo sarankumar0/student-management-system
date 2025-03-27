@@ -1,0 +1,76 @@
+import { useState } from "react";
+import { FaTachometerAlt, FaBook, FaClipboardList, FaChartBar, FaSignOutAlt, FaCog, FaUsers, FaCommentDots, FaChevronDown } from "react-icons/fa";
+import { MdOutlineClass } from "react-icons/md";
+
+const Sidebar = () => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [hoveredDropdown, setHoveredDropdown] = useState(null);
+
+  return (
+    <div
+      className={`h-screen bg-gray-900 text-white transition-all duration-500 ${isExpanded ? "w-64" : "w-20"}`} 
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
+    >
+      <div className="flex flex-col h-full p-4">
+        
+        <div className="flex items-center space-x-4 mb-6">
+          <div className="bg-purple-500 p-2 rounded-full">📌</div>
+          <span className={`whitespace-nowrap transition-opacity  duration-200 ${isExpanded ? "opacity-100 font-extrabold text-xl" : "opacity-0 hidden"}`}>Oxford</span>
+        </div>
+
+        <div className="flex items-center space-x-4 mb-10">
+          <div className={`transition-opacity duration-200 ${isExpanded ? "opacity-100" : "opacity-0 hidden"}`}>
+            <p className="text-sm font-medium">Saran</p>
+            <p className="text-xs text-gray-400">Student</p>
+          </div>
+        </div>
+
+        <nav className="flex-1">
+          <ul className="space-y-5">
+            {[{ icon: FaTachometerAlt, label: "Dashboard" },
+              { icon: FaCommentDots, label: "Forum" },
+              { icon: FaUsers, label: "Groups" }].map((item, index) => (
+              <li key={index} className="flex items-center space-x-4 p-2 rounded-md hover:bg-gray-700 cursor-pointer">
+                <item.icon className="text-2xl flex-shrink-0" />
+                <span className={`whitespace-nowrap transition-opacity duration-200 ${isExpanded ? "opacity-100" : "opacity-0 hidden"}`}>{item.label}</span>
+              </li>
+            ))}
+
+            {/* Dropdown Menus */}
+            {[{ label: "Courses", items: ["Subjects", "Assignments", "Study Materials"] },
+              { label: "Exams", items: ["Exam Timetable", "Results", "Past Papers"] },
+              { label: "Others", items: ["Library", "Events", "Internships"] }].map((menu, index) => (
+              <li key={index} 
+                className="relative cursor-pointer"
+                onMouseEnter={() => setHoveredDropdown(menu.label)}
+                onMouseLeave={() => setHoveredDropdown(null)}
+              >
+                <div className="flex items-center space-x-4 p-2 rounded-md hover:bg-gray-700">
+                  <FaBook className="text-2xl flex-shrink-0" />
+                  <span className={`whitespace-nowrap transition-opacity duration-200 ${isExpanded ? "opacity-100" : "opacity-0 hidden"}`}>{menu.label}</span>
+                  {isExpanded && <FaChevronDown className={`ml-auto transition-transform duration-300 ${hoveredDropdown === menu.label ? "rotate-180" : "rotate-0"}`} />}
+                </div>
+                <ul className={`pl-8 space-y-2 overflow-hidden transition-all duration-300 ${hoveredDropdown === menu.label ? "max-h-40 opacity-100" : "max-h-0 opacity-0"}`}>
+                  {menu.items.map((subItem, subIndex) => (
+                    <li key={subIndex} className="p-2 text-gray-300 hover:text-white">{subItem}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        {/* Settings at Bottom */}
+        <div className="absolute bottom-4 w-full">
+          <div className="flex items-center space-x-4 p-2 rounded-md hover:bg-gray-700 cursor-pointer">
+            <FaCog className="text-2xl flex-shrink-0" />
+            <span className={`whitespace-nowrap transition-opacity duration-200 ${isExpanded ? "opacity-100" : "opacity-0 hidden"}`}>Settings</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;
