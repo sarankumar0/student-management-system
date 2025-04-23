@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const Student = require("./Student");
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -7,14 +8,23 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   rawPassword: { type: String },
   role: { type: String, enum: ["admin", "user"], default: "user" },
-  plan: { type: String, enum: ["basic", "classic", "pro"], default: null }, 
-  registrationNumber: { type: String, unique: true, required: true }, 
-  batch:{type: String},
-  batchStartDate:{type:Date},
+  plan: { type: String, enum: ["basic", "classic", "pro"], default: null },
+  
+  studentId: { 
+    type: String, 
+    unique: true, 
+    required: function() { 
+      return this.role === "user";  // ✅ Required only if plan exists (Basic, Classic, Pro)
+    } 
+  },
+
+  batch: { type: String },
+  batchStartDate: { type: Date },
   lastLogin: { type: Date },
   profileImg: { type: String, default: "/uploads/default-profile.png" },
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
-});{timeStamps:true}
+}, { timestamps: true });
+
+
 
 // Hash password before saving to database
 userSchema.pre("save", async function (next) {

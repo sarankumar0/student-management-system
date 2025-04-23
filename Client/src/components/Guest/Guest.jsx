@@ -4,7 +4,7 @@ import { IoMdMenu, IoMdClose } from 'react-icons/io';
 import { Link } from 'react-router-dom';
 import Footer from './Footer';
 
-import { FaQuoteLeft, FaUsers, FaLock, FaChartBar, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import {  FaUsers, FaLock, FaChartBar, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 const testimonials = [
   {
@@ -87,7 +87,7 @@ function Guest() {
   }, []);
 
   const Register = () => {
-    navigate('/Register');
+    navigate('/Pricing');
   };
   const Login = () => {
     navigate('/Login');
@@ -97,7 +97,7 @@ function Guest() {
     <div>
       <div
         className="h-screen bg-cover bg-center"
-        style={{ backgroundImage: "url('../../assets/GuestPagePoster.png')" }}
+        style={{ backgroundImage: "url('../../assets/GuestPoster1.jpg')" }}
       >
 
           <div className="h-screen bg-cover bg-center flex flex-col items-center justify-center px-6">
@@ -211,7 +211,7 @@ function Guest() {
                 Empowering students with knowledge, innovation, and excellence.
               </p>
               <div className="mt-6 flex space-x-4">
-                <button className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-lg shadow-md hover:scale-105 transition">
+                <button onClick={Register} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-lg shadow-md hover:scale-105 transition">
                   Apply Now
                 </button>
                 <button className="px-6 py-3 bg-white text-gray-900 font-semibold rounded-lg shadow-md hover:scale-105 transition">

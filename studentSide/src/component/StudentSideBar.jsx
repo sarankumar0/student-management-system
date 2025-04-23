@@ -35,8 +35,8 @@ const StudentSidebar = () => {
     {
       label: "Exams", icon: FaGraduationCap, items: [
         { label: "Exam Timetable", icon: FaCalendarAlt, path: "/exams/timetable" },
+        { label: "Take Quiz", icon: FaFileAlt, path: "/exams/TakeQuiz"},
         { label: "Results", icon: FaScroll, path: "/exams/results" },
-        { label: "Past Papers", icon: FaFileAlt, path: "/exams/papers" }
       ]
     },
     {

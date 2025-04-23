@@ -22,7 +22,6 @@ router.get("/",async(req,res)=>{
         res.status(500).json({ message: "Error fetching batches", error: error.message })
     }
     console.log("🔍 /api/batches endpoint hit");
-    // console.log("Batches data:", batches);
 });
 
 module.exports=router;

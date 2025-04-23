@@ -1,26 +1,28 @@
+// routes/authRoutes.js (Cleaned Up)
 const express = require("express");
-const User = require("../models/User");
-const Counter = require("../models/Counter");
+const User = require("../models/User"); // Assuming User model holds login details and 'plan'
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
-const SECRET_KEY = "your_secret_key";
-const SECRET_ADMIN_KEY = "EDITH"; 
-const nodemailer = require("nodemailer");
-const Student = require("../models/Student");
-const DeletedLog = require("../models/DeletedLog");
+const mongoose = require('mongoose');
+const Counter = require("../models/Counter"); // Needed for registration helpers
+const nodemailer = require("nodemailer"); // Needed for registration helpers
+const LoginHistory = require("../models/LoginHistory");
+// const { authRouter, verifyToken } = require('./authRoutes');
+// Keep your secret key (ideally load from .env)
+const SECRET_KEY = process.env.JWT_SECRET || "your_temp_secret_key";
 
-// Helper Function: Get the next student ID
-const getNextStudentId = async (plan) => {
-  const { batchNumber, batchName, } = await getBatchInfo(plan);
-  const prefix = plan === "basic" ? "Ba" : plan === "classic" ? "Cl" : "Pr";
-  const latestStudent = await User.findOne({ plan }).sort({ registrationNumber: -1 }).lean();
-  let newId = latestStudent ? parseInt(latestStudent.registrationNumber.substring(2)) + 1 : 1001;
-  return { regNumber: `${prefix}${newId}`, batchNumber, batchName };
-};
+//--- Registration Helper Functions (Keep as they are used by /register) ---
+// const getNextStudentId = async (plan) => { /* ... your existing code ... */ };
 
+// const isAdmin = (req, res, next) => {
+//   if (req.user && req.user.role === 'admin') {
+//        next(); // User is admin, proceed
+//   } else {
+//        res.status(403).json({ message: 'Forbidden: Admin access required.' }); // Not an admin
+//   }
+// };
 
-//Helper Function: Get the next Admin ID
 const getNextAdminId = async () => {
   let counter = await Counter.findOne({ plan: "admin" });
   if (!counter) {
@@ -31,327 +33,326 @@ const getNextAdminId = async () => {
   return `Ad${String(counter.lastId).padStart(3, "0")}`; // Format like Ad001, Ad002
   };
 
-  const getBatchInfo = async (plan) => {
-    const latestBatch = await User.findOne({ plan })
-      .sort({ batchNumber: -1 })
-      .select("batchNumber")
-      .lean();
-    let batchNumber = latestBatch ? latestBatch.batchNumber : 1;
-    const studentCount = await User.countDocuments({ plan, batchNumber });
-    if (studentCount >= 50) {
-      batchNumber += 1; // Create a new batch
+
+const sendWelcomeEmail = async (email, name, plan, studentId) => { 
+       const transporter=nodemailer.createTransport({
+        service:"gmail",
+        auth:{
+          user:"project.oxford001@gmail.com",
+          pass:"rlww noaz kxhg qque",
+        }
+      });
+      let planMessage = "";
+      if (plan === "basic") {
+        planMessage = "You are on the Basic Plan. You have access to limited features.";
+      } else if (plan === "classic") {
+        planMessage = "You are on the Classic Plan. Enjoy additional features for a better experience!";
+      } else if (plan === "pro") {
+        planMessage = "Welcome to the Pro Plan! You have access to all premium features!";
+      }
+      const mailOptions = {
+        from:"project.oxford001@gmail.com",
+        to: email,
+        subject: "🎉 Welcome to Our Platform!",
+        html: `<div style="font-family: Arial, sans-serif; color: #333; max-width: 500px; margin: auto; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+        <h2 style="color: #4CAF50; text-align: center;">🎉 Welcome, ${name}!</h2>
+        <p>We're thrilled to have you onboard at <strong>Oxford Academy</strong>.</p>
+        <p><strong>Your Registration ID:</strong> <span style="color: #4CAF50; font-weight: bold;">${studentId}</span></p>
+        <p>${planMessage}</p>
+        <p>Enjoy your learning journey with us! If you have any questions, feel free to reach out.</p>
+        <p style="text-align: center; margin-top: 20px;">
+          Best Regards,<br/>
+          <strong>Team Oxford</strong>
+        </p>
+      </div>`,
+      };
+      try {
+        await transporter.sendMail(mailOptions);
+        console.log(`📧 Welcome email sent to ${email}`);
+      } catch (error) {
+        console.error("🚨 Error sending email:", error);
+      }
     }
-    const batchName = `${plan.charAt(0).toUpperCase() + plan.slice(1)}-${batchNumber}`;
-    return { batchNumber, batchName };
-  };
+// Note: getBatchInfo seems unused in the provided routes, remove if not needed by getNextStudentId directly
+const getBatchInfo = async (plan) => { /* ... your existing code ... */ };
+
+
+const getNextStudentId = async (plan) => {
+    try { // Add try block for error handling
+      // Ensure getBatchInfo call works or handle its errors if needed
+      // const { batchNumber, batchName } = await getBatchInfo(plan); // We might not need this immediately
   
-  router.post("/register", async (req, res) => {
-  try {
-    let { name, email, password, role, plan, adminKey } = req.body;
-    if (!password || typeof password !== "string") {
-      return res.status(400).json({ message: "Password is required and must be a string" });
+      const prefix = plan === "basic" ? "Ba" : plan === "classic" ? "Cl" : "Pr";
+      const latestStudent = await User.findOne({ plan })
+                                      .sort({ studentId: -1 })
+                                      .select('studentId') // Optimize: only select needed field
+                                      .lean(); // Use lean for performance if only reading
+  
+      let sequenceNumber = 1001; // Default start number
+      if (latestStudent && latestStudent.studentId) {
+        // Safely parse the number part
+        const numPart = latestStudent.studentId.substring(prefix.length);
+        const currentNum = parseInt(numPart, 10);
+        if (!isNaN(currentNum)) { // Check if parsing was successful
+          sequenceNumber = currentNum + 1;
+        } else {
+           console.warn(`Could not parse sequence number from ${latestStudent.studentId}. Using default start.`);
+           // Optionally, query the count for this plan as a fallback
+           // const count = await User.countDocuments({ plan });
+           // sequenceNumber = 1001 + count;
+        }
+      }
+  
+      const regNumber = `${prefix}${sequenceNumber}`;
+      console.log(`Generated student registration number: ${regNumber}`);
+  
+      // --- !!! ENSURE THIS RETURN EXISTS !!! ---
+      // Return an object with the regNumber key
+      return { regNumber /*, batchNumber, batchName */ }; // Add batch info if needed later
+  
+    } catch (error) {
+      console.error("Error within getNextStudentId:", error);
+      // Throwing the error signals failure to the caller
+      throw new Error(`Failed to generate next student ID for plan ${plan}.`);
+      // Alternatively, return null/undefined, but the caller must check for it
+      // return undefined;
     }
-    if (role === "admin" && adminKey !== SECRET_ADMIN_KEY) {
-      return res.status(403).json({ message: "Invalid Admin Key" });
-    }
-    console.log("Raw Password Before Hashing:", `"${password}"`);
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "umm.. you are not new.. Try to Login.." });
-    }
-    console.log("📌 Raw Password Before Hashing:", `"${password}"`);
-    const hashedPassword = await bcrypt.hash(password, 10);
-    console.log("🔒 Hashed Password Before Saving:", `"${hashedPassword}"`);
-    let registrationNumber = "";
-    let batchNumber = null;
-    let batchName = null;
-    if (role === "admin") {
-      registrationNumber = await getNextAdminId();
-    } else {
-      const batchInfo = await getNextStudentId(plan || "basic");
-      registrationNumber = batchInfo.regNumber;
-      batchNumber = batchInfo.batchNumber;
-      batchName = batchInfo.batchName;
-    }
-    const newUser = new User({
-      name,
-      email,
-      password,
-      role,
-      plan: role === "user" ? plan : null,
-      registrationNumber,
-      batchNumber,
-      batchName,
-    });
-    await newUser.save();
+  };
+// --- Register Route (Keep) ---
+router.post("/register", async (req, res) => {
+    try {
+        const { name, email, password, role, plan } = req.body;
 
-    res.status(201).json({ message: "User registered successfully!", registrationNumber,batchName, });
-
-    sendWelcomeEmail(newUser.email, newUser.name, newUser.plan,newUser.registrationNumber)
-      .then(() => console.log(`📧 Email sent successfully to ${newUser.email}`))
-      .catch((err) => console.error("🚨 Email sending failed:", err));
+        // Use registrationNumber for studentId field as per your schema example?
+        let registrationNumber = null;
+        if (role !== "admin" && plan) {
+            try { // Inner try specifically for ID generation
+              const idResult = await getNextStudentId(plan); // Get the full result object
       
-  } catch (error) {
-    res.status(500).json({ message: "Error registering user", error: error.message });
-  }
-});
+              // --- Check if the helper function succeeded ---
+              if (!idResult || !idResult.regNumber) {
+                console.error("getNextStudentId did not return a valid result.");
+                throw new Error("Student ID generation failed internally.");
+              }
+              registrationNumber = idResult.regNumber;
+            }catch (idError) { // Catch errors specifically from getNextStudentId
+                console.error("Failed to get student ID during registration:", idError);
+                // Return a specific error to the client
+                return res.status(500).json({ message: "Server error generating student ID.", error: idError.message });
+              }
+            }
 
-                                
-// router.post("/login", async (req, res) => {
-//   try {
-//     let { email, password } = req.body;
-//     if (!password || typeof password !== "string") {
-//       return res.status(400).json({ message: "Invalid password format" });
-//     }
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(400).json({ message: "umm.. We Think You are New to our Academy.. Try to Register First..!" });
-//     }
-//     console.log("Entered Password:", `"${password}"`);
-//     console.log("Stored Hashed Password:", `"${user.password}"`);
-//     password = password.trim();
-//     //Compare with stored hash
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     console.log("🔄 Password Match Status:", isMatch);
-//     if (!isMatch) {
-//       return res.status(400).json({ message: "Invalid credentials (Wrong password)" });
-//     }
-//     const token = jwt.sign(
-//       { id: user._id, email: user.email, role: user.role },
-//       "your_secret_key",
-//       { expiresIn: "1h" }
-//     );
-//     res.cookie("token", token, { httpOnly: false, secure: false, sameSite: "Lax",path: "/",axAge: 60 * 60 * 1000, });
-//     res.cookie("user", JSON.stringify(user), { httpOnly: false, secure: false, sameSite: "Lax",path: "/",});
-//     res.cookie("registrationNumber", user.registrationNumber, { httpOnly: false, secure: false, sameSite: "Lax",domain: "localhost", });
-//     res.status(200).json({ message: "Login successful", token, user });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error logging in", error: error.message });
-//   }
-// });
+        // Generate Admin ID only if role is admin
+        // You might not need adminId stored on the User model itself unless required elsewhere
+        // let adminId = null;
+        // if (role === "admin") { adminId = await getNextAdminId(); }
 
-// DELETE student
+        // **Important**: Ensure password hashing happens here if not done in model pre-save hook
+        // const salt = await bcrypt.genSalt(10);
+        // const hashedPassword = await bcrypt.hash(password, salt);
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            console.log(`Register Route: Email already exists: ${email}`);
+           return res.status(400).json({ message: "Email already exists." });
+        }
+    
+        const newUser = new User({
+            name,
+            email,
+            password, // Ensure this is hashed before saving (either here or via mongoose pre-save)
+            role,
+            plan: role === "admin" ? undefined : plan, // Admins might not have a plan
+            studentId:registrationNumber // Use registrationNumber field based on your model example
+            // studentId: registrationNumber, // If your field is named studentId
+        });
+        console.log(`Register Route: Prepared newUser object (before save):`, newUser.toObject()); // Log the object data
 
-// router.post("/login", async (req, res) => {
-//   try {
-//       const { email, password } = req.body;
-//       const user = await User.findOne({ email });
-//       if (!user) return res.status(400).json({ message: "User not found. Please register first." });
+        await newUser.save();
 
-//       const isMatch = await bcrypt.compare(password, user.password);
-//       if (!isMatch) return res.status(400).json({ message: "Invalid credentials." });
+         // Send welcome email after successful save
+        if (role !== "admin" && plan && registrationNumber) {
+            sendWelcomeEmail(newUser.email, newUser.name, newUser.plan, newUser.studentId)
+                .then(() => console.log(`📧 Email sent successfully to ${newUser.email}`))
+                .catch((err) => console.error("🚨 Email sending failed:", err));
+        }
 
-//       // Generate JWT Token
-//       const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
+        res.status(201).json({ message: "Registration successful!" });
 
-//       // Store JWT in HTTP-only cookie
-//       res.cookie("token", token, { httpOnly: true, secure: false, sameSite: "Lax", maxAge: 60 * 60 * 1000 });
-//       console.log("🔹 Login API hit for:", email);
-//       res.status(200).json({ message: "Login successful" });
-//   } catch (error) {
-//       res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// });
+    } catch (error) {
+        console.error("Register Route Error Caught:", error);
+        // Handle duplicate email error (code 11000)
+        if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
+            console.log("Register Route: Duplicate email detected by DB index.");
+            return res.status(400).json({ message: "Email already exists." });
+        }
+        if (error.keyPattern && error.keyPattern.studentId) {
+            console.log(`Register Route: Duplicate studentId detected by DB index. Attempted: ${error.keyValue?.studentId}`);
+            // This indicates an issue with the ID generation logic *despite* console logs
+            return res.status(400).json({ message: "Failed to generate unique student ID. Please try again." });
+       }
+        // Handle other potential unique indexes
+        console.log("Register Route: Duplicate key error on other field:", error.keyValue);
+      return res.status(400).json({ message: "Duplicate key error.", details: error.keyValue });
+    }
+   if (error.name === 'ValidationError') { // Mongoose validation error
+       const messages = Object.values(error.errors).map(err => err.message);
+       console.log("Register Route: Mongoose validation failed:", messages);
+       return res.status(400).json({ message: "Validation failed", errors: messages });
+   }
+   // --- End Specific Handling ---
 
-// 🔹 PROFILE API (Fetch user details after login)
-// router.get("/user-profile", async (req, res) => {
-//   try {
-//       const token = req.cookies.token;
-//       if (!token) return res.status(401).json({ message: "Unauthorized" });
+   res.status(500).json({ message: "Error registering user", error: error.message });
+ }
+);
 
-//       // Verify JWT and get user ID
-//       const decoded = jwt.verify(token, SECRET_KEY);
-//       const user = await User.findById(decoded.id).select("-password"); // Exclude password
-//       if (!user) return res.status(404).json({ message: "User not found" });
 
-//       res.status(200).json(user);
-//   } catch (error) {
-//       res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// });
+
+// --- Login Route (Keep) ---
+// routes/authRoutes.js -> POST /login
 
 router.post("/login", async (req, res) => {
+  console.log("--- Login Request Received ---");
   try {
       const { email, password } = req.body;
-      const user = await User.findOne({ email });
-      if (!user) return res.status(400).json({ message: "User not found" });
+      console.log(`[Login] Attempting login for: ${email}`);
+      const user = await User.findOne({ email }); // Get the full Mongoose document
+
+      if (!user) { /* ... handle not found ... */ }
+      console.log("[Login] User found.");
 
       const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+      if (!isMatch) { /* ... handle mismatch ... */ }
+      console.log("[Login] Password matched.");
 
-      // ✅ Save last login time
-      user.lastLogin = new Date();
-      await user.save();
+      // --- Record Login Event ---
+      try {
+          console.log(`[Login] Preparing history record. User object found: ${!!user}`); // Confirm user object exists
 
-      const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
-      res.cookie("token", token, { httpOnly: true, secure: false, sameSite: "Lax", maxAge: 60 * 60 * 1000 });
+          // --- DETAILED LOGGING for user._id ---
+          const userIdValue = user._id; // Assign to variable for clarity
+          console.log(`[Login] Value of user._id: ${userIdValue}`);
+          console.log(`[Login] Type of user._id: ${typeof userIdValue} / Is ObjectId?: ${userIdValue instanceof mongoose.Types.ObjectId}`);
+          // --- END DETAILED LOGGING ---
 
-      res.status(200).json({ message: "Login successful" });
-  } catch (error) {
-      res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
+          if (!LoginHistory) { throw new Error("LoginHistory model is not loaded."); }
+          if (!userIdValue) { throw new Error("userIdValue is null or undefined."); } // Check the variable
 
+          // Create instance using the variable
+          const loginRecord = new LoginHistory({ userId: userIdValue });
 
+          // --- Log the created instance BEFORE save ---
+          console.log("[Login] >>> LoginHistory object created:", JSON.stringify(loginRecord.toObject(), null, 2));
+          // --- END LOG ---
 
-router.get("/user-profile", async (req, res) => {
-  console.log("🔹 User profile API hit");
+          // Attempt save
+          const savedRecord = await loginRecord.save();
+          console.log("[Login] ✅ Login event recorded successfully:", savedRecord._id);
 
-  const token = req.cookies.token; // ✅ Check if token exists
-  console.log("🔹 Extracted Token:", token);
+      } catch (historyError) {
+          console.error("🔥🔥🔥 [Login] CRITICAL FAILURE: Error recording login history:", historyError);
+          console.error(historyError); // Log full error object
+      }
+      // --- End Record Login Event ---
 
-  if (!token) return res.status(401).json({ message: "Unauthorized, no token" });
-
-  try {
-      const decoded = jwt.verify(token, SECRET_KEY);
-      console.log("🔹 Decoded Token:", decoded);
-
-      const user = await User.findById(decoded.id).select("-password");
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      console.log("✅ User found:", user);
-      res.status(200).json(user);
-  } catch (error) {
-      console.error("❌ Error in user-profile:", error.message);
-      res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-
-
-
-
-router.delete("/:id", async (req, res) => {
-  try {
-    const student = await Student.findByIdAndDelete(req.params.id);
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
-    res.status(200).json({ message: "Student deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// POST deleted log
-router.post("/", async (req, res) => {
-  try {
-    const log = new DeletedLog(req.body);
-    await log.save();
-    res.status(201).json({ message: "Log saved successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-//Middleware to Verify Token
-const verifyToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    jwt.verify(token, SECRET_KEY, async (err, decoded) => {
-      if (err) return res.status(403).json({ message: "Invalid token" });
-
-      req.user = decoded; // Now includes id, email, and role
-      next();
+      // Generate token & response...
+      console.log("[Login] Generating token...");
+      const tokenPayload = { id: user._id, role: user.role, plan: user.plan };
+        const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "1h" });
+      console.log("[Login] Sending successful response.");
+      res.status(200).json({ message: "Login successful",
+        token: token, // Send the generated token
+        user: {     // Send necessary non-sensitive user info
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            plan: user.plan,
+            studentId: user.studentId, // Use correct field name from your schema
+            registrationNumber: user.registrationNumber, // Or this if you have both? Check schema.
+            profileImg: user.profileImg
+        }
     });
+
   } catch (error) {
-    return res.status(500).json({ message: "Token verification error", error: error.message });
+      // ... main catch block ...
+      console.error("❌ [Login] Main Catch Block Error:", error);
+      res.status(500).json({ message: "Server error during login", error: error.message });
   }
-};
-
-//Verify Token API for Frontend
-router.get("/verify", verifyToken, (req, res) => {
-  res.json({ success: true, user: req.user });
 });
 
-//Example Protected Route
-router.get("/protected-data", verifyToken, (req, res) => {
-  res.json({ message: "This is protected data", user: req.user });
-});
+// ... rest of file ...
 
-const sendWelcomeEmail=async(email,name,plan,registrationNumber)=>{
-  const transporter=nodemailer.createTransport({
-    service:"gmail",
-    auth:{
-      user:"project.oxford001@gmail.com",
-      pass:"rlww noaz kxhg qque",
+
+// --- Verify Token Middleware (Keep and Enhance) ---
+// This middleware will be used by protected routes (like student dashboard)
+const verifyToken = async (req, res, next) => { // Make it async
+    try {
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res.status(401).json({ message: "Unauthorized: No token provided." });
+        }
+
+        const token = authHeader.split(" ")[1];
+
+        // Verify the token
+        const decoded = jwt.verify(token, SECRET_KEY); // Throws error if invalid/expired
+
+        // --- FETCH Full User from DB ---
+        // We need the *current* user data, including the 'plan' field
+        const user = await User.findById(decoded.id).select('-password'); // Exclude password
+
+        if (!user) {
+             // User associated with token no longer exists
+             return res.status(401).json({ message: "Unauthorized: User not found." });
+         }
+
+        // --- Attach the full user object to the request ---
+        req.user = user;
+        next(); // Proceed to the next middleware or route handler
+
+    } catch (error) {
+        console.error("Token verification error:", error);
+        if (error.name === 'JsonWebTokenError') {
+             return res.status(401).json({ message: "Unauthorized: Invalid token." });
+        }
+        if (error.name === 'TokenExpiredError') {
+             return res.status(401).json({ message: "Unauthorized: Token expired." });
+        }
+        // Generic server error for other issues
+        return res.status(500).json({ message: "Token verification error", error: error.message });
     }
-  });
-  let planMessage = "";
-  if (plan === "basic") {
-    planMessage = "You are on the Basic Plan. You have access to limited features.";
-  } else if (plan === "classic") {
-    planMessage = "You are on the Classic Plan. Enjoy additional features for a better experience!";
-  } else if (plan === "pro") {
-    planMessage = "Welcome to the Pro Plan! You have access to all premium features!";
-  }
-  const mailOptions = {
-    from:"project.oxford001@gmail.com",
-    to: email,
-    subject: "🎉 Welcome to Our Platform!",
-    html: `<div style="font-family: Arial, sans-serif; color: #333; max-width: 500px; margin: auto; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
-    <h2 style="color: #4CAF50; text-align: center;">🎉 Welcome, ${name}!</h2>
-    <p>We're thrilled to have you onboard at <strong>Oxford Academy</strong>.</p>
-    <p><strong>Your Registration ID:</strong> <span style="color: #4CAF50; font-weight: bold;">${registrationNumber}</span></p>
-    <p>${planMessage}</p>
-    <p>Enjoy your learning journey with us! If you have any questions, feel free to reach out.</p>
-    <p style="text-align: center; margin-top: 20px;">
-      Best Regards,<br/>
-      <strong>Team Oxford</strong>
-    </p>
-  </div>`,
-  };
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Welcome email sent to ${email}`);
-  } catch (error) {
-    console.error("🚨 Error sending email:", error);
+};
+
+const isAdmin = (req, res, next) => {
+  // This relies on verifyToken running first and adding req.user
+  if (req.user && req.user.role === 'admin') {
+       console.log("isAdmin check: PASSED"); // Optional log
+       next(); // User is admin, proceed
+  } else {
+       console.log(`isAdmin check: FAILED (User: ${req.user?.email}, Role: ${req.user?.role})`); // Optional log
+       res.status(403).json({ message: 'Forbidden: Admin access required.' }); // Not an admin
   }
 };
 
-// 🔹 API: Get User Count by Plan (For Pie Chart)
-router.get("/count-by-plan", async (req, res) => {
-  try {
-      const plans = ["basic", "classic", "pro"];
-      const counts = await User.aggregate([
-          { $match: { role: "user", plan: { $in: plans } } },
-          { $group: { _id: "$plan", count: { $sum: 1 } } }
-      ]);
-
-      const result = { basic: 0, classic: 0, pro: 0 };
-      counts.forEach(plan => { result[plan._id] = plan.count });
-
-      res.status(200).json(result);
-  } catch (error) {
-      res.status(500).json({ message: "Error fetching user count", error: error.message });
-  }
+// --- Verify Route (Keep - useful for frontend checks) ---
+// Uses the middleware defined above
+router.get("/verify", verifyToken, (req, res) => {
+    // If verifyToken middleware passes, req.user is populated
+    // Send back non-sensitive user info
+     res.json({
+        success: true,
+        user: {
+            id: req.user._id,
+            name: req.user.name,
+            email: req.user.email,
+            role: req.user.role,
+            plan: req.user.plan,
+            registrationNumber: req.user.registrationNumber
+        }
+    });
 });
 
 
-// 🔹 API: Get Daily Login Stats (For Bar Chart)
-router.get("/login-stats", async (req, res) => {
-  try {
-      const loginCounts = await User.aggregate([
-          { $match: { lastLogin: { $exists: true } } },
-          { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$lastLogin" } }, count: { $sum: 1 } } },
-          { $sort: { _id: 1 } }
-      ]);
-
-      const formattedData = loginCounts.reduce((acc, entry) => {
-          acc[entry._id] = entry.count;
-          return acc;
-      }, {});
-
-      res.status(200).json(formattedData);
-  } catch (error) {
-      res.status(500).json({ message: "Error fetching login stats", error: error.message });
-  }
-});
-
-
-module.exports = router;
+// --- Export the router and the middleware ---
+module.exports = { authRouter: router, verifyToken, isAdmin }; // Export both

@@ -11,3 +11,19 @@ input::-ms-clear {
 input[type="password"]::-webkit-credentials-auto-fill-button {
   visibility: hidden;
 }
+
+/* Hide scrollbar by default, show on hover/overflow */
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+.hover\:scrollbar-default:hover {
+  scrollbar-width: auto; /* Firefox */
+  -ms-overflow-style: auto; /* IE/Edge */
+}
+.hover\:scrollbar-default:hover::-webkit-scrollbar {
+  display: block; /* Chrome/Safari */
+}

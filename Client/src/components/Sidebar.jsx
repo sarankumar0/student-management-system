@@ -16,7 +16,7 @@ function Sidebar({ isCollapsed, setIsCollapsed }) {
 
   return (
     <div>
-      <nav className={`bg-gray-900 text-white p-5 z-[100] h-screen fixed  transition-all duration-200 ${isCollapsed ? "w-20" : "w-60"}`}>
+      <nav className={`bg-gray-900 text-white p-5 z-[100] h-screen fixed   ${isCollapsed ? "w-22" : "w-52"} transition-all duration-900`}>
         {/* Header */}
         <div className="flex justify-between items-center mb-5">
           <h1 className={` text-xl font-bold ${isCollapsed ? "hidden" : "block"}`}>Admin</h1>
@@ -41,18 +41,18 @@ function Sidebar({ isCollapsed, setIsCollapsed }) {
           </li>
 
           <li>
-            <NavLink to="/admin/students" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
+            <NavLink to="/admin/StudentsTable" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
               <FaUserGraduate className="text-2xl" />
               {!isCollapsed && <span className='px-5' >Students</span>}
             </NavLink>
           </li>
 
-          <li>
+          {/* <li>
             <NavLink to="/admin/batches" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded   ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
               <FaCalendarAlt className="text-2xl" />
               {!isCollapsed && <span className='px-5' >Batches</span>}
             </NavLink>
-          </li>
+          </li> */}
 
           <li>
             <NavLink to="/admin/payments" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
@@ -69,7 +69,14 @@ function Sidebar({ isCollapsed, setIsCollapsed }) {
           </li>
 
           <li>
-            <NavLink to="/admin/posts" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
+            <NavLink to="/admin/Test" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
+              <FaFileAlt className="text-2xl" />
+              {!isCollapsed && <span className='px-5' >Test&Result</span>}
+            </NavLink>
+          </li>
+
+          <li>
+            <NavLink to="posts/assignments" className={({ isActive }) => `flex items-center space-x-3 p-2 rounded  ${isActive ? "bg-gray-700" : "hover:bg-gray-700"}`}>
               <FaClipboardList className="text-2xl" />
               {!isCollapsed && <span className='px-5' >Post Details</span>}
             </NavLink>

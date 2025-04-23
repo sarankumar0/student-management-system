@@ -39,7 +39,6 @@ const Login = () => {
   };
 
   // const handleLogin = async () => {
-  //   event.preventDefault();
   //   if (emailError || passwordError || !email || !password) {
   //     toast.error("Fix errors before submitting");
   //     return;
@@ -98,42 +97,53 @@ const Login = () => {
 //   }
 // };
 
-const handleLogin = async (event) => {
-  event.preventDefault();
+// const handleLogin = async (event) => {
+//   event.preventDefault();
 
-  if (!email || !password) {
-      toast.error("Email and password are required!");
-      return;
-  }
+//   if (!email || !password) {
+//       toast.error("Email and password are required!");
+//       return;
+//   }
 
-  try {
-      // ✅ Login Request
-      const response = await axios.post(
-          "http://localhost:5000/api/auth/login",
-          { email: email.trim(), password: password.trim() },
-          { withCredentials: true }
-      );
+//   try {
+//       // ✅ Login Request
+//       const response = await axios.post(
+//           "http://localhost:5000/api/auth/login",
+//           { email: email.trim(), password: password.trim() },
+//           { withCredentials: true }
+//       );
 
-      toast.success("Login successful!");
 
-      // ✅ Fetch user profile after login
-      const profileResponse = await axios.get("http://localhost:5000/api/auth/user-profile", {
-          withCredentials: true,
-      });
+//       localStorage.setItem('Email', response.data.email);
 
-      const user = profileResponse.data;
-      setUser(user); // ✅ Store user globally
 
-      // ✅ Redirect based on role & separate projects
-      if (user.role === "admin") {
-          window.location.href = "http://localhost:5174/admin"; // ✅ Redirect to Admin Project
-      } else {
-          window.location.href = "http://localhost:5173/dashboard"; // ✅ Redirect to Student Project
-      }
-  } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed!");
-  }
-};
+      
+
+//       // ✅ Fetch user profile after login
+//       const profileResponse = await axios.get("http://localhost:5000/api/auth/user-profile", {
+//           withCredentials: true,
+//       });
+//       toast.success("Login successful!");
+
+//       const user = profileResponse.data;
+//       setUser(user); 
+
+     
+        
+      
+
+//       // ✅ Redirect based on role & separate projects
+//       if (user.role === "admin") {
+//           window.location.href = "http://localhost:5174/admin"; // ✅ Redirect to Admin Project
+//       } else {
+//           window.location.href = "http://localhost:5173/dashboard"; // ✅ Redirect to Student Project
+//       }
+//   console.log('handle ')
+      
+//   } catch (error) {
+//       toast.error(error.response?.data?.message || "Login failed!");
+//   }
+// };
 
 
 // 🔹 Fetch User Profile After Login
@@ -149,26 +159,121 @@ const handleLogin = async (event) => {
 //       console.error("❌ Failed to fetch user profile:", error.response?.data?.message || error.message);
 //   }
 // };
-const fetchUserProfile = async () => {
+
+
+const handleLogin = async (event) => {
+  event.preventDefault();
+
+  if (!email || !password) {
+      toast.error("Email and password are required!");
+      return;
+  }
+
+  console.log("Attempting login for email:", email); // Log start
+
   try {
-      const response = await axios.get("http://localhost:5000/api/auth/user-profile", {
-          withCredentials: true,
-      });
+      // ✅ Login Request
+      const response = await axios.post(
+          "http://localhost:5000/api/auth/login",
+          { email: email.trim(), password: password.trim() }
+      );
 
-      console.log("👤 User Data Received:", response.data);
-      setUser(response.data);
+      // --- Log the entire successful response ---
+      console.log("✅ Login API Response:", response.data);
 
-      // 🔹 Redirect based on user role
-      if (response.data.role === "admin") {
-          navigate("/admin");
+      // --- Check if login response contains token and user ---
+      if (response.data && response.data.token && response.data.user) {
+          const { token, user } = response.data;
+          setUser(user); 
+          toast.success("Login successful!");
+          // --- Log before saving token ---
+          console.log(`>>> Preparing to save. Token type: ${typeof token}, Token value: ${token}`);
+          if (typeof token !== 'string' || token.length < 20) { // Basic sanity check on token
+              console.error("🔥 ERROR: Invalid token received before trying to save!");
+              toast.error("Received invalid authentication token from server.");
+              return; // Stop if token looks wrong
+          }
+
+          try {
+               // --- Store Token in localStorage ---
+               localStorage.setItem('authToken', token);
+               console.log("✅ Token save attempted."); // Confirm setItem was called
+
+               // --- IMMEDIATELY Verify if token was saved ---
+               const savedToken = localStorage.getItem('authToken');
+               if (savedToken === token) {
+                   console.log("🎉 SUCCESS: Token read back from localStorage MATCHES:", savedToken);
+               } else {
+                   console.error("🔥 FAILURE: Token read back from localStorage MISMATCH or NULL:", savedToken);
+                   toast.error("Critical Error: Failed to properly store authentication token!");
+                   // Decide if you should stop execution here? Maybe not redirect?
+               }
+          } catch (storageError) {
+              console.error("🔥 CRITICAL Error saving token to localStorage:", storageError);
+              toast.error("Error saving login session. Please check browser settings.");
+              return; // Stop if storage fails
+          }
+
+
+          // --- Store User Object (Using state or context) ---
+          // Assuming setUser comes from props, state, or context (e.g., useUser())
+          if (typeof setUser === 'function') {
+              console.log("👤 Setting user state/context with:", user);
+              setUser(user); // Update global/local state
+          } else {
+               console.warn("setUser function not available - user state might not be updated globally.");
+           }
+
+          toast.success("Login successful!");
+
+          // --- Redirect based on role ---
+          console.log(`Redirecting based on role: ${user.role}`);
+          if (user.role === "admin") {
+               // Using window.location.href works but causes a full page reload.
+               // If this component uses useNavigate(), prefer that for SPA feel.
+               window.location.href = "http://localhost:5174/admin";
+          } else {
+            const encodedToken = encodeURIComponent(token);
+            window.location.href = `http://localhost:5173/dashboard?token=${encodedToken}`;
+          }
+
       } else {
-          navigate("/dashboard");
+          // Handle case where login response doesn't have expected structure
+          console.error("❌ Login response missing token or user data:", response.data);
+          toast.error("Login failed: Invalid server response structure.");
       }
 
   } catch (error) {
-      console.error("❌ Failed to fetch user profile:", error.response?.data?.message || error.message);
+      console.error("❌ Login catch block error:", error);
+      // Log the detailed error response if available
+      if (error.response) {
+          console.error("Axios error response:", error.response.data);
+      }
+      toast.error(error.response?.data?.message || "Login failed!");
   }
 };
+
+
+// const fetchUserProfile = async () => {
+//   try {
+//       const response = await axios.get("http://localhost:5000/api/auth/user-profile", {
+//           withCredentials: true,
+//       });
+
+//       console.log("👤 User Data Received:", response.data);
+//       setUser(response.data);
+
+//       // 🔹 Redirect based on user role
+//       if (response.data.role === "admin") {
+//           navigate("/admin");
+//       } else {
+//           navigate("/dashboard");
+//       }
+
+//   } catch (error) {
+//       console.error("❌ Failed to fetch user profile:", error.response?.data?.message || error.message);
+//   }
+// };
 
 
 
@@ -278,157 +383,3 @@ const fetchUserProfile = async () => {
 export default Login;
 
 
-
-
-// import { useState } from "react";
-// import { useNavigate } from "react-router-dom";
-// import "@fortawesome/fontawesome-free/css/all.min.css";
-// import { ToastContainer, toast } from "react-toastify"; 
-// import "react-toastify/dist/ReactToastify.css"; 
-// import GuestNavBar from "./components/Guest/GuesstNavBar";
-// import axios from "axios";
-// axios.defaults.withCredentials = true; // ✅ Set globally
-
-// import Cookies from "js-cookie";
-// import { jwtDecode } from "jwt-decode";
-
-
-// const Login = () => {
-
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [isValidEmail, setIsValidEmail] = useState(false);
-//   const [isValidPassword, setIsValidPassword] = useState(false);
-//   const [showPassword, setShowPassword] = useState(false);
-//   const navigate = useNavigate();
-//   const validateEmail = (email) => {
-//     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-//     setIsValidEmail(emailRegex.test(email));
-//   };
-//   const validatePassword = (password) => {
-//     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-//     setIsValidPassword(passwordRegex.test(password));
-//   };
-//   const handleLogin = async () => {
-//     try {
-//       const response = await axios.post("http://localhost:5000/api/auth/login", {
-//         email: email.trim(),
-//         password: password.trim(),
-//       },{ withCredentials: true });
-
-//       console.log("Response from API:", response.data); // Debugging
-//       const { token, user } = response.data;
-//       if (!token || !user) {
-//         toast.error("Login failed: Invalid response from server");
-//         return;
-//       }
-
-//        // ✅ Store user data correctly
-//     localStorage.setItem("token", token);
-//     localStorage.setItem("user", JSON.stringify(user));  // ✅ Save full user object
-//     localStorage.setItem("registrationNumber", user.registrationNumber);  // ✅ Save reg ID
-//       toast.success("Login successful!", { position: "top-right" });
-  
-//       //Redirect to different servers based on role
-//       setTimeout(() => {
-//         if (user.role === "admin") {
-//           window.location.href = "http://localhost:5174/admin"; 
-//         } else if (user.role === "user") {
-//           window.location.href = "http://localhost:5173/dashboard"; 
-//         } else {
-//           toast.error("Unauthorized role detected!");
-//         }
-//       }, 1000);
-  
-//     } catch (error) {
-//       console.error("Login Error:", error.response?.data || error);
-//       toast.error(error.response?.data?.message || "Invalid credentials!", { position: "top-right" });
-//     }
-//   };
-  
-//   const Register = () => {
-//     navigate("/Register");
-//   };
-
-//   return (
-
-//     <div className="bg-gray-100 min-h-screen flex flex-col items-center">
-//      <GuestNavBar />
-//       <div className="flex justify-center items-center min-h-screen w-full max-w-2xl bg-gray-100">
-//         <div className="bg-white shadow-lg rounded-lg p-14 w-full max-w-2xl min-h-[500px] opacity-0 translate-y-20 animate-slideInUp transition-all duration-700">
-//           <h1 className="text-center text-blue-600 text-3xl font-bold mt-0 pt-0 mb-8">Login to Oxford University</h1>
-          
-//           <div className="mb-6">
-//             <label className="block text-gray-700 text-lg mb-2">Email</label>
-//             <input
-//               type="text"
-//               className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-lg"
-//               placeholder="Example@gmail.com"
-//               value={email}
-//               onChange={(e) => {
-//                 setEmail(e.target.value);
-//                 validateEmail(e.target.value);
-//               }}
-//             />
-//             {!isValidEmail && email && (
-//               <span className="text-red-500 text-sm">Invalid email format</span>
-//             )}
-//           </div>
-
-//           <div className="mb-6 relative">
-//             <label className="block text-gray-700 text-lg mb-2">Password</label>
-//             <div className="relative">
-//               <input
-//                 type={showPassword ? "text" : "password"}
-//                 className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-lg pr-10"
-//                 placeholder="Password@12"
-//                 value={password}
-//                 onChange={(e) => {
-//                   setPassword(e.target.value);
-//                   validatePassword(e.target.value);
-//                 }}
-//               />
-//               <button
-//                 type="button"
-//                 onClick={() => setShowPassword(!showPassword)}
-//                 className="absolute inset-y-0 right-3 flex items-center text-gray-600"
-//               >
-//                 <i className={showPassword ? "fa fa-eye" : "fa fa-eye-slash"}></i>
-//               </button>
-//             </div>
-//             {!isValidPassword && password && (
-//               <span className="text-red-500 text-sm">
-//                 Password must contain 1 uppercase, 1 lowercase, 1 number, and at least 8 characters.
-//               </span>
-//             )}
-//             <a href="#" className="block text-right text-blue-600 hover:underline my-3">I forgot my password</a>
-//           </div>
-
-//           <button
-//             type="button"
-//             onClick={handleLogin}
-//             className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-lg font-semibold"
-//             disabled={!isValidEmail || !isValidPassword}
-//           >
-//             Login
-//           </button>
-          
-//           <div>
-//             <h4 className="text-center mt-6 text-lg">Log in with Another Account</h4>
-//             <div className="flex justify-center space-x-6 mt-4">
-//               <a href="#" className="text-gray-600 text-2xl px-1 sm:px-3 text-4xl"><i className="fa-brands fa-google"></i></a>
-//               <a href="#" className="text-gray-600 text-2xl px-1 lg:px-3 text-4xl"><i className="fa-brands fa-facebook"></i></a>
-//               <a href="#" className="text-gray-600 text-2xl px-1 lg:px-3 text-4xl"><i className="fa-brands fa-twitter"></i></a>
-//               <a href="#" className="text-gray-600 text-2xl px-1 lg:px-3 text-4xl"><i className="fa-brands fa-github"></i></a>
-//               <a href="#" className="text-gray-600 text-2xl px-1 lg:px-3 text-4xl"><i className="fa-brands fa-linkedin"></i></a>
-//             </div> 
-//             <div className="text-center mt-6 text-lg">Not a member yet? <button onClick={Register} className="text-blue-600 hover:underline">Sign up</button> free</div>
-//           </div>
-//         </div>
-//       </div>
-//       <ToastContainer />
-//     </div>
-//   );
-// };
-
-// export default Login;

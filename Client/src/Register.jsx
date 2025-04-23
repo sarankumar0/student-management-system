@@ -36,37 +36,40 @@ const RegisterPage = () => {
       toast.error("Passwords do not match!", { position: "top-right" });
       return;
     }
-
+  
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const plan = urlParams.get("plan") || null; // Get plan from URL
+  
       const requestBody = {
         name: `${data.firstName} ${data.lastName}`,
         email: data.email,
         password: data.password,
-        role: data.role.toLowerCase(),
+        role: data.role === "user" ? plan : data.role.toLowerCase(), // ✅ Fixed role assignment
+        plan,
       };
-
-      //Send adminKey only if the role is Admin
+  
+      // Send adminKey only if the role is Admin
       if (data.role === "Admin") {
         requestBody.adminKey = data.adminKey;
-      } else {
-        requestBody.plan = plan; //Assign selected plan for students
       }
-
+  
       const response = await axios.post("http://localhost:5000/api/auth/register", requestBody);
-
+  
       setRegistrationData({
         email: data.email,
         registrationNumber: response.data.registrationNumber,
       });
-
-      setModalOpen(true); //Open modal instead of redirecting immediately
-
+  
+      setModalOpen(true); // Open modal instead of redirecting immediately
+  
       toast.success(response.data.message, { position: "top-right" });
-      setTimeout(() => navigate("/login"), 2000);
+  
     } catch (error) {
       toast.error(error.response?.data?.message || "Registration failed", { position: "top-right" });
     }
   };
+  
 
   const isFormFilled =
     watch("firstName") &&

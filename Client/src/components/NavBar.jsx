@@ -157,7 +157,7 @@ const Navbar = () => {
             <div className="absolute right-0 mt-2 w-32 bg-white text-black rounded-lg shadow-lg">
               <button className="block w-full px-4 py-2 hover:bg-gray-200">Profile</button>
               <button onClick={() => setModalOpen(true)} className="block w-full px-4 py-2 hover:bg-gray-200">
-                Logout
+                Log Out
               </button>
             </div>
           )}

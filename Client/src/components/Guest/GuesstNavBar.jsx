@@ -42,22 +42,29 @@ const GuestNavBar = () => {
         </nav>
 
         <div className="flex space-x-4  ">
+
+          
+          {location.pathname !== "/pricing" && (
+  <Link
+    to="/pricing"
+    className={`px-4 py-2 rounded-full transition duration-300 ${
+      location.pathname === "/Pricing"
+        ? "hidden"
+        : "text-black hover:bg-indigo-500 hover:text-white hover:border hover:border-white hover:text-indigo-900"
+    }`}
+  >
+    Register
+  </Link>
+)}
           <Link
             to="/login"
             className={`px-4 py-2    transition duration-300 ${
-              location.pathname === "/login" ? "bg-indigo-700 text-white rounded-full" : "hover:bg-white hover:border hover:border-white hover:rounded-full"
+              location.pathname === "/login" ? "bg-indigo-700 text-white rounded-full" : "hover:bg-indigo-500 hover:border hover:border-white hover:text-white hover:rounded-full"
             }`}
           >
             Login
           </Link>
-          <Link
-            to="/register"
-            className={`px-4 py-2  rounded-full transition duration-300 ${
-              location.pathname === "/register" ? "bg-indigo-700 text-white" : " text-black hover:bg-white hover:border hover:border-white hover:text-indigo-900"
-            }`}
-          >
-            Register
-          </Link>
+
         </div>
       </div>
 
