@@ -104,6 +104,8 @@ require('./models/Student'); // Assuming you have this and studentRoutes uses it
 require('./models/DeletedLog'); // Assuming you have this and deletedLogRoutes uses it
 // Add require('./models/Report') if reportRoutes uses it
 require('./models/Assignment');
+require("./models/AI_courses");
+// require("./models/AI_courses");
 console.log("Mongoose models registered.");
 // --- End Model Loading ---
 
@@ -122,10 +124,12 @@ const quizRoutes = require('./Routes/quizRoutes'); // Keep
 const assignmentRoutes = require('./Routes/assignmentRoutes'); 
 const aiGenerationRoutes = require('./Routes/aiGenerationRoutes'); // <-- Import new routes
 const courseAdminRoutes = require('./Routes/courseRoutes');
+const  aiCourseRoutes=require('./Routes/aiCourseRoutes');
 
 // --- Keep requires that might be used directly in THIS file (less common) ---
 const CourseMaterial = require("./models/courseMaterial"); // Keep if used below
 const Video = require("./models/video"); // Keep if used below
+const authRoutes = require("./Routes/authRoutes");
 
 
 // --- Initialize Express App ---
@@ -145,8 +149,8 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Static 
 
 // --- Mount ALL Your Routes ---
 console.log("Mounting API routes...");
-app.use('/api/auth', authRouter);           // Authentication routes
 app.use('/api/student', stdRoutes);         // Student specific data routes
+app.use('/api/auth',authRouter);           // Authentication routes
 app.use('/api/quizzes', quizRoutes);        // Quiz admin routes (Needs protection)
 app.use('/api/stats', adminStatsRoutes);      // Admin statistics routes (Needs protection)
 app.use("/api/pdfs", pdfRoutes);            // PDF/Material routes (Needs protection)
@@ -159,7 +163,7 @@ app.use("/api/deletedLogs", deletedLogRoutes); // Keep (Needs protection?)
 app.use('/api/assignments', assignmentRoutes); 
 app.use('/api/ai', aiGenerationRoutes); // <-- Mount AI generation routes
 app.use('/api/courses', courseAdminRoutes); // <-- Mount course admin routes
-
+app.use('/api/ai-courses', aiCourseRoutes);
 
 // --- Keep Your Direct Route Definitions ---
 const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key"; // Keep

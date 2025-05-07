@@ -38,8 +38,8 @@ function AdminQuizResults() {
                  // For simplicity, let's assume we don't *need* the title right now,
                  // but ideally the backend might return {quizTitle: '...', submissions: [...]}
                  // Or we can make another call:
-                 // const quizInfo = await axios.get(`http://localhost:5000/api/quizzes/${quizId}`, config);
-                 // setQuizTitle(quizInfo.data.title);
+                 const quizInfo = await axios.get(`http://localhost:5000/api/quizzes/${quizId}`, config);
+                 setQuizTitle(quizInfo.data.title);
 
             } catch (err) {
                  console.error("Error fetching submissions:", err);

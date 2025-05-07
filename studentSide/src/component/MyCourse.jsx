@@ -1,13 +1,10 @@
-// // src/component/MyCourses.jsx (New File)
-
 // import React, { useState, useEffect } from 'react';
 // import axios from 'axios';
 // import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-// import { faFilePdf, faVideo, faEdit, faSpinner, faExclamationTriangle,faDownload } from '@fortawesome/free-solid-svg-icons';
-// import { Navigate, useNavigate } from 'react-router-dom';
-// import { useUser } from '../context/UserContext'; // Assuming context provides user info
-
-// // Reusable Badge Component (or import if defined elsewhere)
+// import { faFilePdf, faVideo, faSpinner, faExclamationTriangle, faDownload } from '@fortawesome/free-solid-svg-icons'; // Added faDownload
+// import { useUser } from '../context/UserContext'; // Assuming context gives user info
+// import { toast } from 'react-toastify';
+// // Reusable Badge Component
 // const AccessTypeBadge = ({ accessType }) => (
 //     <span className={`
 //         inline-block text-xs text-white px-2 py-0.5 rounded-full capitalize font-medium leading-none
@@ -23,51 +20,115 @@
 // function MyCourses() {
 //     const [pdfs, setPdfs] = useState([]);
 //     const [videos, setVideos] = useState([]);
-//     const [quizzes, setQuizzes] = useState([]);
 //     const [loading, setLoading] = useState(true);
 //     const [error, setError] = useState(null);
-//     const { user } = useUser(); // Get user info from context
-//     const navigate=useNavigate();
+//     const [downloadingPdfId, setDownloadingPdfId] = useState(null);
+//     const { user } = useUser(); // Get user from context for welcome message
+
+//     // Fetch Course Materials (PDFs & Videos)
 //     useEffect(() => {
+//         let isMounted = true; // Flag for cleanup
 //         const fetchStudentData = async () => {
 //             setLoading(true);
 //             setError(null);
 //             const token = localStorage.getItem('authToken');
-
 //             if (!token) {
-//                 setError("Authentication required. Please log in.");
-//                 setLoading(false);
+//                 if (isMounted) { setError("Authentication required."); setLoading(false); }
 //                 return;
 //             }
+//             const config = { headers: { Authorization: `Bearer ${token}` } };
 
 //             try {
-//                 const response = await axios.get('http://localhost:5000/api/student/dashboard', {
-//                     headers: { Authorization: `Bearer ${token}` }
-//                 });
-//                 console.log("Student Dashboard Data:", response.data);
-//                 setPdfs(response.data.pdfs || []);
-//                 setVideos(response.data.videos || []);
-//                 setQuizzes(response.data.quizzes || []);
+//                 const endpoint = 'http://localhost:5000/api/student/course-materials';
+//                 console.log(`[MyCourses] Fetching from: ${endpoint}`);
+//                 const response = await axios.get(endpoint, config);
+//                 console.log("Student Course Materials Data:", response.data);
+//                 if (isMounted) {
+//                     setPdfs(response.data.pdfs || []);
+//                     setVideos(response.data.videos || []);
+//                 }
 //             } catch (err) {
-//                 console.error("Error fetching student data:", err);
-//                  setError(err.response?.data?.message || "Failed to load data. Please try again.");
-//                  // Clear data on error
-//                  setPdfs([]);
-//                  setVideos([]);
-//                  setQuizzes([]);
+//                 console.error("Error fetching student course materials:", err);
+//                  if (isMounted) {
+//                     setError(err.response?.data?.message || "Failed to load materials.");
+//                     setPdfs([]); setVideos([]);
+//                  }
 //             } finally {
-//                 setLoading(false);
+//                 if (isMounted) setLoading(false);
 //             }
 //         };
-
 //         fetchStudentData();
-//     }, []); // Fetch once on mount
 
-//      const handleStartQuiz = (quizId) => {
-//         navigate(`/student/quiz/${quizId}`);
-//          // TODO: Navigate to the quiz taking page, e.g., navigate(`/student/quiz/${quizId}`);
-//      };
+//         return () => { isMounted = false; }; // Cleanup function
+//     }, []); // Empty array means fetch once on mount
+//     const handleDownloadPdf = async (filename, title) => {
+//         if (!filename) {
+//             toast.error("Invalid file link.");
+//             return;
+//         }
+//         setDownloadingPdfId(filename); // Indicate loading state for this specific button
+//         const token = localStorage.getItem('authToken');
+//         if (!token) {
+//             toast.error("Authentication error. Please log in.");
+//             setDownloadingPdfId(null);
+//             return;
+//         }
 
+//         const downloadUrl = `http://localhost:5000/api/pdfs/download/${encodeURIComponent(filename)}`;
+//         console.log("Attempting to download:", downloadUrl);
+
+//         try {
+//             const response = await axios.get(downloadUrl, {
+//                 headers: {
+//                     Authorization: `Bearer ${token}` // <-- ADD AUTH HEADER
+//                 },
+//                 responseType: 'blob' // <-- IMPORTANT: Receive file as Blob
+//             });
+
+//             // --- Trigger Browser Download ---
+//             // Create a URL for the blob object
+//             const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+
+//             // Create a temporary link element
+//             const link = document.createElement('a');
+//             link.href = blobUrl;
+
+//             // Suggest a filename (use title if available, otherwise original filename)
+//             // Sanitize title just in case
+//             const safeTitle = title ? title.replace(/[/\\?%*:|"<>]/g, '-') : filename;
+//             link.setAttribute('download', `${safeTitle}.pdf`); // Set the desired filename
+
+//             // Append link to body, click it, remove it
+//             document.body.appendChild(link);
+//             link.click();
+//             document.body.removeChild(link);
+
+//             // Revoke the object URL to free up memory
+//             window.URL.revokeObjectURL(blobUrl);
+//             console.log("Download initiated for:", filename);
+
+//         } catch (err) {
+//             console.error("Error downloading PDF:", err);
+//             const errorMsg = err.response?.data?.message || err.response?.statusText || "Download failed.";
+//             // Check if blob error message needs decoding (might not be standard JSON)
+//              if (err.response?.data instanceof Blob && err.response?.data.type === "text/plain") {
+//                  // Try to read error message from Blob
+//                  try {
+//                       const text = await err.response.data.text();
+//                       console.error("Backend error message:", text);
+//                       toast.error(`Download failed: ${text}`);
+//                   } catch (readErr) {
+//                       toast.error(errorMsg); // Fallback
+//                   }
+//              } else {
+//                   toast.error(errorMsg); // Show error message from JSON or default
+//               }
+//         } finally {
+//             setDownloadingPdfId(null); // Reset loading state for this button
+//         }
+//     };
+
+//     // --- Render Logic ---
 
 //     if (loading) {
 //         return (
@@ -89,52 +150,65 @@
 
 //     return (
 //         <div className="p-4 md:p-6 space-y-8">
-//             {/* Welcome Message */}
 //             <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-//                 My Learning Materials {user ? `for ${user.plan?.toUpperCase()} Plan` : ''}
+//                 My Learning Materials {user ? <span className='text-lg font-medium text-indigo-600'>({user.plan?.toUpperCase()} Plan)</span> : ''}
 //             </h1>
 
-//             {/* Course Materials (PDFs) Section */}
+//             {/* PDF Materials Section */}
 //             <section>
 //                 <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
 //                     <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-600" />
-//                     Course Materials (PDF)
+//                     Course Documents
 //                 </h2>
 //                 {pdfs.length > 0 ? (
-//                     <ul className="space-y-3">
-//                         {pdfs.map(pdf => (
-//                             <li key={pdf._id} className="bg-white p-3 rounded shadow hover:shadow-md transition-shadow flex justify-between items-center">
-//                                 <div>
-//                                      <a
-//                                         href={`http://localhost:5000/api/pdfs/download/${pdf.fileUrl}`}
-//                                         target="_blank"
-//                                         rel="noopener noreferrer"
-//                                         className="text-indigo-700 hover:underline font-medium mr-4"
-//                                         download={pdf.title ? `${pdf.title.replace(/[/\\?%*:|"<>]/g, '-')}.pdf` : 'download.pdf'} // Use title as filename (sanitize it)
-//                                      >
-//                                          {pdf.title || 'Untitled PDF'}
-//                                      </a>
-//                                      {/* Optional: Add date or other info */}
-//                                      <p className="text-xs text-gray-500">Added: {new Date(pdf.createdAt).toLocaleDateString()}</p>
-//                                 </div>
-//                                 <div className='flex items-center gap-2'> {/* Group badge and potential download icon */}
-//         {/* <AccessTypeBadge accessType={pdf.accessType} /> */}
-//         {/* Optional: Add a download icon link as well */}
-        
-//         <a href={`http://localhost:5000${pdf.fileUrl}`}
-//            download={pdf.title ? `${pdf.title.replace(/[/\\?%*:|"<>]/g, '-')}.pdf` : 'download.pdf'}
-//            title="Download PDF"
-//            className="text-gray-500 hover:text-indigo-600">
-//            <FontAwesomeIcon icon={faDownload} /> 
-//         </a>
-       
-//     </div>
-//                                 <AccessTypeBadge accessType={pdf.accessType} />
-//                             </li>
-//                         ))}
-//                     </ul>
+//                     <ul className="space-y-2">
+//                        {pdfs.map(pdf => {
+//                             let filename = null;
+//                             let isValidLink = false;
+//                             if (pdf.fileUrl) {
+//                                 try {
+//                                     const parts = pdf.fileUrl.split('/');
+//                                     filename = parts[parts.length - 1];
+//                                      isValidLink = !!filename; // Simple check if filename could be extracted
+//                                     } catch (e) {
+//                                         console.error("Error parsing filename from fileUrl:", pdf.fileUrl, e);
+//                                     }
+//                                 }
+//                                 const isDownloading = downloadingPdfId === filename; // Check if this PDF is downloading
+//                             return (
+//                                  <li key={pdf._id} className="bg-white p-3 rounded shadow hover:shadow-md transition-shadow flex justify-between items-center flex-wrap gap-2"> {/* Added flex-wrap and gap */}
+//                                       {/* Left side: Title */}
+//                                       <div className='flex-1 min-w-0 mr-4'> {/* Allow shrinking/wrapping */}
+//                                           <span className='font-medium text-gray-800 break-words'> {/* Allow long titles to wrap */}
+//                                               {pdf.title || 'Untitled Document'}
+//                                            </span>
+//                                            {/* You could add description here if needed */}
+//                                        </div>
+//                                        {/* Right side: Badge and Download Button */}
+//                                        <div className='flex items-center gap-3 flex-shrink-0'> {/* Prevent shrinking */}
+//                                            <AccessTypeBadge accessType={pdf.accessType} />
+//                                            {isValidLink ? (
+//                                    <button
+//                                    onClick={() => handleDownloadPdf(filename, pdf.title)}
+//                                    disabled={isDownloading} // Disable while downloading this file
+//                                    className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center disabled:opacity-50 disabled:cursor-wait"
+//                                    title={`Download ${pdf.title || 'PDF'}`}
+//                                >
+//                                    {isDownloading ? <FontAwesomeIcon icon={faSpinner} spin className="mr-1.5" /> : <FontAwesomeIcon icon={faDownload} className="mr-1.5" />}
+//                                    {isDownloading ? 'Downloading...' : 'Download'}
+//                                </button>
+//                             ) : (
+//                                 <span className='text-xs text-gray-400 italic'>(Invalid Link)</span>
+//                             )}
+//                         </div>
+//                   </li>
+//               );
+//         })}
+//     </ul>
 //                 ) : (
-//                     <p className="text-gray-500 italic">No PDF materials available for your plan.</p>
+//                     <div className="text-center py-4 px-4 bg-gray-50 rounded-lg">
+//                         <p className="text-gray-500 italic">No PDF documents available for your plan.</p>
+//                      </div>
 //                 )}
 //             </section>
 
@@ -145,72 +219,41 @@
 //                      Video Lessons
 //                  </h2>
 //                 {videos.length > 0 ? (
-//                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Adjusted grid for smaller screens */}
 //                         {videos.map(video => (
-//                             <div key={video._id} className="bg-white p-4 rounded shadow hover:shadow-md transition-shadow">
-//                                  <h3 className="font-semibold text-gray-800 mb-2">{video.title}</h3>
-//                                  {/* Basic Video Player */}
-//                                  <video width="100%" controls preload="metadata" className="rounded mb-2 max-h-60"> {/* Limit height */}
-//                                      <source src={`http://localhost:5000${video.filePath}`} type="video/mp4" /> {/* Adjust type if needed */}
-//                                      Your browser does not support the video tag.
-//                                  </video>
-//                                  <div className="flex justify-end">
-//                                       <AccessTypeBadge accessType={video.accessType} />
+//                             <div key={video._id} className="bg-white p-3 rounded shadow flex flex-col"> {/* Reduced padding slightly */}
+//                                 <h3 className="font-semibold text-gray-800 mb-2 text-sm truncate" title={video.title}>{video.title}</h3> {/* Truncate title */}
+//                                 <div className="aspect-video mb-2 bg-black rounded overflow-hidden"> {/* Aspect ratio container */}
+//                                      <video width="100%" height="100%" controls preload="metadata" className="object-cover"> {/* Use object-cover */}
+//                                          <source src={`http://localhost:5000${video.filePath}`} type="video/mp4" />
+//                                          Your browser does not support the video tag.
+//                                      </video>
 //                                  </div>
-//                             </div>
+//                                  <div className="flex justify-end mt-auto pt-1"> {/* Push badge to bottom */}
+//                                      <AccessTypeBadge accessType={video.accessType} />
+//                                  </div>
+//                              </div>
 //                         ))}
 //                     </div>
 //                 ) : (
-//                      <p className="text-gray-500 italic">No video lessons available for your plan.</p>
-//                 )}
+//                      <div className="text-center py-4 px-4 bg-gray-50 rounded-lg">
+//                         <p className="text-gray-500 italic">No video lessons available for your plan.</p>
+//                      </div>
+//                  )}
 //             </section>
-
-//             {/* Available Quizzes Section */}
-//             <section>
-//                  <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
-//                       <FontAwesomeIcon icon={faEdit} className="mr-2 text-green-600" />
-//                       Available Quizzes
-//                  </h2>
-//                 {quizzes.length > 0 ? (
-//                     <ul className="space-y-3">
-//                         {quizzes.map(quiz => (
-//                             <li key={quiz._id} className="bg-white p-3 rounded shadow hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between items-start sm:items-center">
-//                                 <div className="mb-2 sm:mb-0">
-//                                      <h3 className="font-semibold text-gray-800">{quiz.title}</h3>
-//                                      {quiz.description && <p className="text-sm text-gray-600 mt-1">{quiz.description}</p>}
-//                                      <div className="text-xs text-gray-500 mt-1 space-x-3">
-//                                          <span>{quiz.questionCount} Questions</span>
-//                                          {quiz.timeLimitMinutes && <span> | {quiz.timeLimitMinutes} min limit</span>}
-//                                      </div>
-//                                 </div>
-//                                 <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-//                                       <AccessTypeBadge accessType={quiz.accessType} />
-//                                       <button
-//                                          onClick={() => handleStartQuiz(quiz._id)}
-//                                          className="bg-indigo-600 text-white text-sm font-medium px-3 py-1 rounded hover:bg-indigo-700 transition-colors whitespace-nowrap"
-//                                       >
-//                                          Start Quiz
-//                                       </button>
-//                                 </div>
-//                             </li>
-//                         ))}
-//                     </ul>
-//                 ) : (
-//                      <p className="text-gray-500 italic">No quizzes currently available for your plan.</p>
-//                 )}
-//             </section>
-
 //         </div>
 //     );
 // }
 
 // export default MyCourses;
 
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFilePdf, faVideo, faSpinner, faExclamationTriangle, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faFilePdf, faVideo, faSpinner, faExclamationTriangle, faDownload, faEye } from '@fortawesome/free-solid-svg-icons';
 import { useUser } from '../context/UserContext';
+import { toast } from 'react-toastify';
 
 const AccessTypeBadge = ({ accessType }) => (
     <span className={`
@@ -229,38 +272,119 @@ function MyCourses() {
     const [videos, setVideos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [downloadingPdfId, setDownloadingPdfId] = useState(null);
+    const [previewPdf, setPreviewPdf] = useState(null);
     const { user } = useUser();
 
+    // Fetch Course Materials (PDFs & Videos)
     useEffect(() => {
+        let isMounted = true;
         const fetchStudentData = async () => {
             setLoading(true);
             setError(null);
             const token = localStorage.getItem('authToken');
-
             if (!token) {
-                setError("Authentication required. Please log in.");
-                setLoading(false);
+                if (isMounted) { setError("Authentication required."); setLoading(false); }
                 return;
             }
+            const config = { headers: { Authorization: `Bearer ${token}` } };
 
             try {
-                const response = await axios.get('http://localhost:5000/api/student/dashboard', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setPdfs(response.data.pdfs || []);
-                setVideos(response.data.videos || []);
+                const endpoint = 'http://localhost:5000/api/student/course-materials';
+                const response = await axios.get(endpoint, config);
+                if (isMounted) {
+                    setPdfs(response.data.pdfs || []);
+                    setVideos(response.data.videos || []);
+                }
             } catch (err) {
-                console.error("Error fetching student data:", err);
-                setError(err.response?.data?.message || "Failed to load data. Please try again.");
-                setPdfs([]);
-                setVideos([]);
+                console.error("Error fetching student course materials:", err);
+                 if (isMounted) {
+                    setError(err.response?.data?.message || "Failed to load materials.");
+                    setPdfs([]); setVideos([]);
+                 }
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
-
         fetchStudentData();
+
+        return () => { isMounted = false; };
     }, []);
+
+    const handleDownloadPdf = async (filename, title) => {
+        if (!filename) {
+            toast.error("Invalid file link.");
+            return;
+        }
+        setDownloadingPdfId(filename);
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            toast.error("Authentication error. Please log in.");
+            setDownloadingPdfId(null);
+            return;
+        }
+
+        try {
+            const response = await axios.get(
+                `http://localhost:5000/api/pdfs/download/${encodeURIComponent(filename)}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'blob'
+                }
+            );
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            const safeTitle = title ? title.replace(/[/\\?%*:|"<>]/g, '-') : filename;
+            link.setAttribute('download', `${safeTitle}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+            toast.success("Download started!");
+
+        } catch (err) {
+            console.error("Error downloading PDF:", err);
+            const errorMsg = err.response?.data?.message || "Download failed.";
+            toast.error(errorMsg);
+        } finally {
+            setDownloadingPdfId(null);
+        }
+    };
+
+    const handlePreviewPdf = (pdf) => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            toast.error("Please log in to preview files");
+            return;
+        }
+        const filename = pdf.fileUrl.split('/').pop();
+        const previewUrl = `http://localhost:5000/api/pdfs/preview/${filename}`;
+        try {
+            // Verify the file exists and is accessible
+            const response =  axios.get(previewUrl, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                responseType: 'blob' // Important for binary data
+            });
+    
+            // Create blob URL for the PDF
+            const blobUrl = URL.createObjectURL(new Blob([response.data]));
+            setPreviewPdf({
+                url: blobUrl,
+                title: pdf.title
+            });
+        } catch (error) {
+            console.error("Preview error:", error);
+            toast.error(error.response?.data?.message || "Failed to load preview");
+        }
+    };
+
+    const closePreview = () => {
+        setPreviewPdf(null);
+    };
 
     if (loading) {
         return (
@@ -282,46 +406,93 @@ function MyCourses() {
 
     return (
         <div className="p-4 md:p-6 space-y-8">
+            {/* PDF Preview Modal */}
+            {previewPdf && (
+    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+                <h3 className="text-lg font-semibold">{previewPdf.title}</h3>
+                <button onClick={() => setPreviewPdf(null)}>✕</button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+                <iframe 
+                    src={`${previewPdf.url}?token=${localStorage.getItem('authToken')}`}
+                    className="w-full h-full"
+                    title="PDF Preview"
+                />
+            </div>
+        </div>
+    </div>
+)}
+
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-                My Learning Materials {user ? `for ${user.plan?.toUpperCase()} Plan` : ''}
+                My Learning Materials {user && (
+                    <span className='text-lg font-medium text-indigo-600'>
+                        ({user.plan?.toUpperCase()} Plan)
+                    </span>
+                )}
             </h1>
 
             {/* PDF Materials Section */}
             <section>
                 <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
                     <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-600" />
-                    Course Materials (PDF)
+                    Course Documents
                 </h2>
                 {pdfs.length > 0 ? (
-                    <ul className="space-y-3">
-                        {pdfs.map(pdf => (
-                            <li key={pdf._id} className="bg-white p-3 rounded shadow hover:shadow-md transition-shadow flex justify-between items-center">
-                                <div>
-                                    <a
-                                        href={`http://localhost:5000/api/pdfs/download/${pdf.fileUrl}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-indigo-700 hover:underline font-medium mr-4"
-                                        download={pdf.title ? `${pdf.title.replace(/[/\\?%*:|"<>]/g, '-')}.pdf` : 'download.pdf'}
-                                    >
-                                        {pdf.title || 'Untitled PDF'}
-                                    </a>
-                                    <p className="text-xs text-gray-500">Added: {new Date(pdf.createdAt).toLocaleDateString()}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pdfs.map(pdf => {
+                            const filename = pdf.fileUrl?.split('/').pop();
+                            const isValidLink = !!filename;
+                            const isDownloading = downloadingPdfId === filename;
+
+                            return (
+                                <div key={pdf._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                                    <div className="p-4">
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-medium text-gray-800 truncate" title={pdf.title || 'Untitled Document'}>
+                                                    {pdf.title || 'Untitled Document'}
+                                                </h3>
+                                            </div>
+                                            <AccessTypeBadge accessType={pdf.accessType} />
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-50 px-4 py-3 flex justify-end space-x-3">
+                                        {isValidLink && (
+                                            <>
+                                                <button
+                                                    onClick={() => handlePreviewPdf(pdf)}
+                                                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center"
+                                                    title="Preview PDF"
+                                                >
+                                                    <FontAwesomeIcon icon={faEye} className="mr-1.5" />
+                                                    Preview
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownloadPdf(filename, pdf.title)}
+                                                    disabled={isDownloading}
+                                                    className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline flex items-center disabled:opacity-50 disabled:cursor-wait"
+                                                    title={`Download ${pdf.title || 'PDF'}`}
+                                                >
+                                                    {isDownloading ? (
+                                                        <FontAwesomeIcon icon={faSpinner} spin className="mr-1.5" />
+                                                    ) : (
+                                                        <FontAwesomeIcon icon={faDownload} className="mr-1.5" />
+                                                    )}
+                                                    Download
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className='flex items-center gap-2'>
-                                    <a href={`http://localhost:5000${pdf.fileUrl}`}
-                                       download={pdf.title ? `${pdf.title.replace(/[/\\?%*:|"<>]/g, '-')}.pdf` : 'download.pdf'}
-                                       title="Download PDF"
-                                       className="text-gray-500 hover:text-indigo-600">
-                                       <FontAwesomeIcon icon={faDownload} /> 
-                                    </a>
-                                </div>
-                                <AccessTypeBadge accessType={pdf.accessType} />
-                            </li>
-                        ))}
-                    </ul>
+                            );
+                        })}
+                    </div>
                 ) : (
-                    <p className="text-gray-500 italic">No PDF materials available for your plan.</p>
+                    <div className="text-center py-4 px-4 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 italic">No PDF documents available for your plan.</p>
+                    </div>
                 )}
             </section>
 
@@ -332,22 +503,35 @@ function MyCourses() {
                     Video Lessons
                 </h2>
                 {videos.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {videos.map(video => (
-                            <div key={video._id} className="bg-white p-4 rounded shadow hover:shadow-md transition-shadow">
-                                <h3 className="font-semibold text-gray-800 mb-2">{video.title}</h3>
-                                <video width="100%" controls preload="metadata" className="rounded mb-2 max-h-60">
-                                    <source src={`http://localhost:5000${video.filePath}`} type="video/mp4" />
-                                    Your browser does not support the video tag.
-                                </video>
-                                <div className="flex justify-end">
-                                    <AccessTypeBadge accessType={video.accessType} />
+                            <div key={video._id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                                <div className="aspect-video bg-black">
+                                    <video 
+                                        controls 
+                                        preload="metadata" 
+                                        className="w-full h-full object-cover"
+                                        title={video.title}
+                                    >
+                                        <source src={`http://localhost:5000${video.filePath}`} type="video/mp4" />
+                                        Your browser does not support the video tag.
+                                    </video>
+                                </div>
+                                <div className="p-4">
+                                    <h3 className="font-semibold text-gray-800 mb-2 truncate" title={video.title}>
+                                        {video.title}
+                                    </h3>
+                                    <div className="flex justify-end">
+                                        <AccessTypeBadge accessType={video.accessType} />
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-gray-500 italic">No video lessons available for your plan.</p>
+                    <div className="text-center py-4 px-4 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 italic">No video lessons available for your plan.</p>
+                    </div>
                 )}
             </section>
         </div>

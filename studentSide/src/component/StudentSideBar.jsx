@@ -27,7 +27,7 @@ const StudentSidebar = () => {
   const dropdownItems = [
     {
       label: "Courses", icon: FaBook, items: [
-        { label: "Subjects", icon: FaChalkboardTeacher, path: "/courses/subjects" },
+        { label: "My-Course", icon: FaChalkboardTeacher, path: "/courses" },
         { label: "Assignments", icon: FaClipboardList, path: "/courses/assignments" },
         { label: "Study Materials", icon: FaFolderOpen, path: "/courses/materials" }
       ]

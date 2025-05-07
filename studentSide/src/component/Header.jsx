@@ -16,7 +16,7 @@ const Header = ({ pageTitle, onSearch, profilePic }) => {
 
   return (
     <header className="bg-white sticky top-0 z-40 shadow-md px-6 py-3 flex justify-between items-center">
-      <h1 className="text-lg font-semibold text-gray-800">{pageTitle}</h1>
+      {/* <h1 className="text-lg font-semibold text-gray-800">{pageTitle}</h1> */}
 
       <div className="hidden md:flex items-center w-1/3">
         <input
@@ -28,12 +28,12 @@ const Header = ({ pageTitle, onSearch, profilePic }) => {
       </div>
 
       <div className="flex items-center space-x-6">
-        <div className="relative group cursor-pointer">
+        {/* <div className="relative group cursor-pointer">
           <FaBullhorn size={22} className="text-gray-600 hover:text-indigo-600" />
           <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition">
             Announcements
           </span>
-        </div>
+        </div> */}
 
         <div className="relative group cursor-pointer">
           <FaEnvelope size={22} className="text-gray-600 hover:text-indigo-600" />

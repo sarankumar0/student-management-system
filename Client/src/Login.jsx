@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useUser } from "./context/UserContext";
 import { useNavigate } from "react-router-dom";
-import "@fortawesome/fontawesome-free/css/all.min.css";
+import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import axios from "axios";
+
 axios.defaults.withCredentials = true;
 
 const Login = () => {
@@ -13,373 +14,230 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  // const [user, setUser] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { setUser } = useUser();
   const navigate = useNavigate();
 
   const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setEmailError("Invalid email format");
-    } else {
-      setEmailError("");
-    }
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    setEmailError(regex.test(email) ? "" : "Invalid email format");
   };
 
   const validatePassword = (password) => {
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
-    if (!passwordRegex.test(password)) {
-      setPasswordError("Password must be 6+ chars, 1 uppercase & 1 number");
-    } else {
-      setPasswordError("");
-    }
-  };
-  const handleBacktoWebsite = () => {
-    navigate("/");
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
+    setPasswordError(regex.test(password) ? "" : "Must be 6+ chars with 1 uppercase & number");
   };
 
-  // const handleLogin = async () => {
-  //   if (emailError || passwordError || !email || !password) {
-  //     toast.error("Fix errors before submitting");
-  //     return;
-  //   }
-  //   try {
-  //     const response = await axios.post(
-  //       "http://localhost:5000/api/auth/login",
-  //       { email: email.trim(), password: password.trim() },
-  //       { withCredentials: true }
-  //     );
-  //     const { token, user } = response.data;
-  //     if (!token || !user) {
-  //       toast.error("Login failed: Invalid response from server");
-  //       return;
-  //     }
-  //     localStorage.setItem("token", token);
-  //     localStorage.setItem("user", JSON.stringify(user));
-  //     localStorage.setItem("registrationNumber", user.registrationNumber);
-  //     toast.success("Login successful!");
-  //     setTimeout(() => {
-  //       if (user.role === "admin") {
-  //         window.location.href = "http://localhost:5174/admin";
-  //       } else {
-  //         window.location.href = "http://localhost:5173/dashboard";
-  //       }
-  //     }, 1000);
-  //   } catch (error) {
-  //     toast.error(error.response?.data?.message || "Invalid credentials!");
-  //   }
-  // };
-
-
-
-// 🔹 Fetch user details after login
-// const handleLogin = async (event) => {
-//   event.preventDefault(); // Prevent default form submission
-
-//   if (!email || !password) {
-//       toast.error("Email and password are required!");
-//       return;
-//   }
-
-//   try {
-//       const response = await axios.post(
-//           "http://localhost:5000/api/auth/login",
-//           { email: email.trim(), password: password.trim() },
-//           { withCredentials: true } // ✅ Ensures cookies are sent and received
-//       );
-
-//       toast.success("Login successful!");
-
-//       // ✅ Fetch user details separately after login
-//       fetchUserProfile();
-//   } catch (error) {
-//       toast.error(error.response?.data?.message || "Login failed!");
-//   }
-// };
-
-// const handleLogin = async (event) => {
-//   event.preventDefault();
-
-//   if (!email || !password) {
-//       toast.error("Email and password are required!");
-//       return;
-//   }
-
-//   try {
-//       // ✅ Login Request
-//       const response = await axios.post(
-//           "http://localhost:5000/api/auth/login",
-//           { email: email.trim(), password: password.trim() },
-//           { withCredentials: true }
-//       );
-
-
-//       localStorage.setItem('Email', response.data.email);
-
-
-      
-
-//       // ✅ Fetch user profile after login
-//       const profileResponse = await axios.get("http://localhost:5000/api/auth/user-profile", {
-//           withCredentials: true,
-//       });
-//       toast.success("Login successful!");
-
-//       const user = profileResponse.data;
-//       setUser(user); 
-
-     
-        
-      
-
-//       // ✅ Redirect based on role & separate projects
-//       if (user.role === "admin") {
-//           window.location.href = "http://localhost:5174/admin"; // ✅ Redirect to Admin Project
-//       } else {
-//           window.location.href = "http://localhost:5173/dashboard"; // ✅ Redirect to Student Project
-//       }
-//   console.log('handle ')
-      
-//   } catch (error) {
-//       toast.error(error.response?.data?.message || "Login failed!");
-//   }
-// };
-
-
-// 🔹 Fetch User Profile After Login
-// const fetchUserProfile = async () => {
-//   try {
-//       const response = await axios.get("http://localhost:5000/api/auth/user-profile", {
-//           withCredentials: true, // ✅ Ensures cookies are sent
-//       });
-
-//       console.log("👤 User Data Received:", response.data);
-//       setUser(response.data); // ✅ Now React will store user details
-//   } catch (error) {
-//       console.error("❌ Failed to fetch user profile:", error.response?.data?.message || error.message);
-//   }
-// };
-
-
-const handleLogin = async (event) => {
-  event.preventDefault();
-
-  if (!email || !password) {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    
+    // Basic validation
+    if (!email || !password) {
       toast.error("Email and password are required!");
       return;
-  }
-
-  console.log("Attempting login for email:", email); // Log start
-
-  try {
-      // ✅ Login Request
+    }
+  
+    if (emailError || passwordError) {
+      toast.error("Please fix validation errors");
+      return;
+    }
+  
+    setIsSubmitting(true);
+    console.log("Attempting login for email:", email);
+  
+    try {
+      // 1. Login Request
       const response = await axios.post(
-          "http://localhost:5000/api/auth/login",
-          { email: email.trim(), password: password.trim() }
+        "http://localhost:5000/api/auth/login",
+        { email: email.trim(), password: password.trim() },
+        { withCredentials: true }
       );
-
-      // --- Log the entire successful response ---
+  
       console.log("✅ Login API Response:", response.data);
-
-      // --- Check if login response contains token and user ---
-      if (response.data && response.data.token && response.data.user) {
-          const { token, user } = response.data;
-          setUser(user); 
-          toast.success("Login successful!");
-          // --- Log before saving token ---
-          console.log(`>>> Preparing to save. Token type: ${typeof token}, Token value: ${token}`);
-          if (typeof token !== 'string' || token.length < 20) { // Basic sanity check on token
-              console.error("🔥 ERROR: Invalid token received before trying to save!");
-              toast.error("Received invalid authentication token from server.");
-              return; // Stop if token looks wrong
-          }
-
-          try {
-               // --- Store Token in localStorage ---
-               localStorage.setItem('authToken', token);
-               console.log("✅ Token save attempted."); // Confirm setItem was called
-
-               // --- IMMEDIATELY Verify if token was saved ---
-               const savedToken = localStorage.getItem('authToken');
-               if (savedToken === token) {
-                   console.log("🎉 SUCCESS: Token read back from localStorage MATCHES:", savedToken);
-               } else {
-                   console.error("🔥 FAILURE: Token read back from localStorage MISMATCH or NULL:", savedToken);
-                   toast.error("Critical Error: Failed to properly store authentication token!");
-                   // Decide if you should stop execution here? Maybe not redirect?
-               }
-          } catch (storageError) {
-              console.error("🔥 CRITICAL Error saving token to localStorage:", storageError);
-              toast.error("Error saving login session. Please check browser settings.");
-              return; // Stop if storage fails
-          }
-
-
-          // --- Store User Object (Using state or context) ---
-          // Assuming setUser comes from props, state, or context (e.g., useUser())
-          if (typeof setUser === 'function') {
-              console.log("👤 Setting user state/context with:", user);
-              setUser(user); // Update global/local state
-          } else {
-               console.warn("setUser function not available - user state might not be updated globally.");
-           }
-
-          toast.success("Login successful!");
-
-          // --- Redirect based on role ---
-          console.log(`Redirecting based on role: ${user.role}`);
-          if (user.role === "admin") {
-               // Using window.location.href works but causes a full page reload.
-               // If this component uses useNavigate(), prefer that for SPA feel.
-               window.location.href = "http://localhost:5174/admin";
-          } else {
-            const encodedToken = encodeURIComponent(token);
-            window.location.href = `http://localhost:5173/dashboard?token=${encodedToken}`;
-          }
-
-      } else {
-          // Handle case where login response doesn't have expected structure
-          console.error("❌ Login response missing token or user data:", response.data);
-          toast.error("Login failed: Invalid server response structure.");
+  
+      // 2. Verify server response structure
+      if (!response.data?.token || !response.data?.user) {
+        throw new Error("Invalid server response structure");
       }
-
-  } catch (error) {
-      console.error("❌ Login catch block error:", error);
-      // Log the detailed error response if available
+  
+      const { token, user } = response.data;
+  
+      // 3. Validate token before storing
+      if (typeof token !== 'string' || token.length < 20) {
+        throw new Error("Invalid authentication token format");
+      }
+  
+      // 4. Store token and update user state
+      localStorage.setItem('authToken', token);
+      setUser(user);
+  
+      // 5. Show success and redirect
+      toast.success("Login successful!", { autoClose: 3000 });
+  
+      setTimeout(() => {
+        if (user.role === "admin") {
+          window.location.href = "http://localhost:5174/admin";
+        } else {
+          const encodedToken = encodeURIComponent(token);
+          window.location.href = `http://localhost:5173/dashboard?token=${encodedToken}`;
+        }
+      }, 3000);
+  
+    } catch (error) {
+      console.error("❌ Login error:", error);
+      
+      let errorMessage = "Login failed. Please check credentials.";
+      
       if (error.response) {
-          console.error("Axios error response:", error.response.data);
+        // Handle axios error response
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.message) {
+        // Handle our custom thrown errors
+        errorMessage = error.message;
       }
-      toast.error(error.response?.data?.message || "Login failed!");
-  }
-};
+      
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-
-// const fetchUserProfile = async () => {
-//   try {
-//       const response = await axios.get("http://localhost:5000/api/auth/user-profile", {
-//           withCredentials: true,
-//       });
-
-//       console.log("👤 User Data Received:", response.data);
-//       setUser(response.data);
-
-//       // 🔹 Redirect based on user role
-//       if (response.data.role === "admin") {
-//           navigate("/admin");
-//       } else {
-//           navigate("/dashboard");
-//       }
-
-//   } catch (error) {
-//       console.error("❌ Failed to fetch user profile:", error.response?.data?.message || error.message);
-//   }
-// };
-
-
-
+  // Check if form is valid (format-wise)
+  const isFormValid = email && 
+                     password && 
+                     !emailError && 
+                     !passwordError;
 
   return (
-    <div className="flex sm:relative justify-center items-center min-h-screen  bg-gray-100"  style={{
-      backgroundImage: `url('../assets/image_flipped_blurred.png')`,  backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-    }}>
-    <div className="flex max-w-4xl w-full bg-white shadow-lg rounded-2xl m-6 overflow-hidden">
-      <div className="w-1/2 hidden md:block md:relative ">
-        <img
-          src="../assets/LoginPageImage.png"
-          alt="Login Illustration"
-          className="w-full h-full object-cover"
-        /><button onClick={handleBacktoWebsite} className="absolute top-4 right-4 bg-gray-700 text-white px-3 py-1 rounded-md text-sm">Back to website</button>
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 bg-cover bg-center" 
+      style={{ backgroundImage: "url('../assets/image_flipped_blurred.png')" }}>
+      
+      <div className="absolute inset-0 bg-white/40 backdrop-blur-sm"></div>
+      
+      <div className="relative z-10 w-full max-w-4xl bg-white shadow-lg rounded-2xl overflow-hidden flex flex-col md:flex-row">
+        
+        {/* Left Side - Image */}
+        <div className="hidden md:block md:w-1/2 relative">
+          <img 
+            src="../assets/LoginPageImage.png" 
+            alt="Login" 
+            className="w-full h-full object-cover" 
+          />
+          <button 
+            onClick={() => navigate("/")} 
+            className="absolute top-4 right-4 bg-gray-700 text-white px-3 py-1 rounded-md text-sm hover:bg-gray-800 transition"
+          >
+            Back to website
+          </button>
+        </div>
+
+        {/* Right Side - Form */}
+        <div className="w-full md:w-1/2 p-8">
+          <h2 className="text-2xl font-semibold text-gray-800">Welcome Back</h2>
+          <p className="text-gray-600 text-sm mt-2">Login to access your account</p>
+
+          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+            
+            {/* Email Field */}
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-1">Email</label>
+              <div className="relative">
+                <FaEnvelope className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    validateEmail(e.target.value);
+                  }}
+                  className="w-full pl-10 p-3 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter your email"
+                />
+              </div>
+              <div className="min-h-[20px]">
+                {emailError && <p className="text-red-500 text-xs mt-1">{emailError}</p>}
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-1">Password</label>
+              <div className="relative">
+                <FaLock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    validatePassword(e.target.value);
+                  }}
+                  className="w-full pl-10 pr-10 p-3 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+              <div className="min-h-[20px]">
+                {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
+              </div>
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={!isFormValid || isSubmitting}
+              className={`w-full py-3 mt-4 rounded-lg text-white transition ${
+                !isFormValid || isSubmitting
+                  ? "bg-purple-400 cursor-not-allowed"
+                  : "bg-purple-600 hover:bg-purple-700"
+              }`}
+            >
+              {isSubmitting ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Logging in...
+                </span>
+              ) : (
+                "Login"
+              )}
+            </button>
+          </form>
+
+          {/* Sign Up Link */}
+          <p className="text-center text-sm text-gray-600 mt-6">
+            Don't have an account?{" "}
+            <button 
+              onClick={() => navigate("/register")} 
+              className="text-purple-600 hover:underline font-medium"
+            >
+              Sign up
+            </button>
+          </p>
+        </div>
       </div>
-{/* Right side form */}
-      <div className="w-full  md:w-1/2 p-8">
-        <h2 className="text-2xl font-semibold text-gray-800">Welcome Back</h2>
-        <p className="text-gray-600 text-sm mt-2">Login to access your account</p>
 
-        <form className="mt-6">
-        <div>
-  {/* Name Field with User Icon */}
-  <label className="block text-gray-700 text-sm font-medium">Email</label>
-  <div className="relative">
-    <i className="fas fa-user absolute left-3 bottom-1/4 transform -translate-y-1/2 text-gray-400"></i>
-    <input
-      type="email"
-      value={email}
-      onChange={(e) => {
-        setEmail(e.target.value);
-        validateEmail(e.target.value);
-      }}
-      className="w-full pl-10 p-3 mt-1 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-      placeholder="Enter your email/Register Number"
-    />
-  </div>
-  {emailError && (
-    <p className="text-red-500 text-sm mt-1">{emailError}</p>
-  )}
-</div>
-
-<div className="mt-4">
-  {/* Password Field with Icon and Eye Toggle */}
-  <label className="block text-gray-700 text-sm font-medium">Password</label>
-  <div className="relative">
-    <i className="fas fa-lock absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-    <input
-      type={showPassword ? "text" : "password"}
-      value={password}
-      onChange={(e) => {
-        setPassword(e.target.value);
-        validatePassword(e.target.value);
-      }}
-      className="w-full pl-10 p-3 mt-1 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-      placeholder="Enter your password"
-    />
-    <i
-      className={`fas ${
-        showPassword ? "fa-eye-slash" : "fa-eye"
-      } absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 cursor-pointer`}
-      onClick={() => setShowPassword(!showPassword)}
-    ></i>
-  </div>
-  <div className="min-h-[20px] mt-1">
-    {passwordError && (
-      <p className="text-red-500 text-sm">{passwordError}</p>
-    )}
-  </div>
-</div>
-
-          <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
-            <label className="flex items-center">
-              <input type="checkbox" className="text-purple-500" />
-              <span className="ml-2">Remember Me</span>
-            </label>
-            <a href="#" className="text-purple-600 hover:underline">Forgot Password?</a>
-          </div>
-          <button
-  type="submit"
-  onClick={handleLogin}
-  className={`w-full mt-6 py-3 rounded-lg transition ${
-    emailError || passwordError || !email || !password
-      ? "bg-purple-400 text-white cursor-not-allowed opacity-50"
-      : "bg-purple-600 text-white hover:bg-purple-700"
-  }`}
-  disabled={emailError || passwordError || !email || !password}
->
-  Login
-</button>
-        </form>
-
-        <p className="text-center text-gray-600 text-sm mt-4">
-          Don't have an account? <a onClick={()=>navigate("/Register")} className="text-purple-600 cursor-pointer hover:underline">Sign up</a>
-        </p>
-      </div>
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="colored"
+      />
     </div>
-    <ToastContainer position="top-right" />
-  </div>
-);
+  );
 };
 
-
 export default Login;
-
-

@@ -11,28 +11,67 @@ const LoginHistory = require("../models/LoginHistory");
 // const { authRouter, verifyToken } = require('./authRoutes');
 // Keep your secret key (ideally load from .env)
 const SECRET_KEY = process.env.JWT_SECRET || "your_temp_secret_key";
+const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || "EDITH";
 
-//--- Registration Helper Functions (Keep as they are used by /register) ---
-// const getNextStudentId = async (plan) => { /* ... your existing code ... */ };
-
-// const isAdmin = (req, res, next) => {
-//   if (req.user && req.user.role === 'admin') {
-//        next(); // User is admin, proceed
-//   } else {
-//        res.status(403).json({ message: 'Forbidden: Admin access required.' }); // Not an admin
-//   }
-// };
 
 const getNextAdminId = async () => {
-  let counter = await Counter.findOne({ plan: "admin" });
-  if (!counter) {
-    counter = new Counter({ plan: "admin", lastId: 0 }); // Start admin IDs from Ad001
+  try {
+    let counter = await Counter.findOne({ plan: "admin" });
+    if (!counter) {
+      counter = new Counter({ plan: "admin", lastId: 0 });
+      await counter.save();
+    }
+    counter.lastId++;
+    await counter.save();
+    return `Ad${String(counter.lastId).padStart(3, "0")}`;
+  } catch (error) {
+    console.error("Error generating admin ID:", error);
+    throw new Error("Failed to generate admin ID");
   }
-  counter.lastId++;
-  await counter.save();
-  return `Ad${String(counter.lastId).padStart(3, "0")}`; // Format like Ad001, Ad002
-  };
+};
+const getNextStudentId = async (plan) => {
+  try {
+      // Validate plan type and set prefix
+      const prefixMap = {
+          basic: 'Ba',
+          classic: 'Cl',
+          pro: 'Pr'
+      };
+      const prefix = prefixMap[plan.toLowerCase()] || 'Ba'; // Default to 'Pr' if invalid plan
 
+      // Find latest student with transaction-safe query
+      const latestStudent = await User.findOne({ plan })
+          .sort({ createdAt: -1 }) // More reliable than sorting by studentId
+          .select('studentId')
+          .lean();
+
+      let sequenceNumber = 1001; // Default starting number
+
+      if (latestStudent?.studentId) {
+          console.log(`Latest student ID found: ${latestStudent.studentId}`);
+          
+          // Extract and validate numeric part
+          const numPart = latestStudent.studentId.replace(/^\D+/g, '');
+          const currentNum = parseInt(numPart, 10);
+          
+          if (!isNaN(currentNum) && numPart.length >= 4) {
+              sequenceNumber = currentNum + 1;
+              console.log(`Next sequence number: ${sequenceNumber}`);
+          } else {
+              console.warn(`Invalid numeric part in ID: ${latestStudent.studentId}. Using default sequence.`);
+          }
+      }
+
+      // Format the new ID with leading zeros if needed
+      const regNumber = `${prefix}${sequenceNumber.toString().padStart(4, '0')}`;
+      console.log(`Generated new student ID: ${regNumber}`);
+      return { regNumber };
+
+  } catch (error) {
+      console.error("Error in getNextStudentId:", error);
+      throw new Error(`ID generation failed for plan ${plan}`);
+  }
+};
 
 const sendWelcomeEmail = async (email, name, plan, studentId) => { 
        const transporter=nodemailer.createTransport({
@@ -77,133 +116,77 @@ const sendWelcomeEmail = async (email, name, plan, studentId) => {
 const getBatchInfo = async (plan) => { /* ... your existing code ... */ };
 
 
-const getNextStudentId = async (plan) => {
-    try { // Add try block for error handling
-      // Ensure getBatchInfo call works or handle its errors if needed
-      // const { batchNumber, batchName } = await getBatchInfo(plan); // We might not need this immediately
-  
-      const prefix = plan === "basic" ? "Ba" : plan === "classic" ? "Cl" : "Pr";
-      const latestStudent = await User.findOne({ plan })
-                                      .sort({ studentId: -1 })
-                                      .select('studentId') // Optimize: only select needed field
-                                      .lean(); // Use lean for performance if only reading
-  
-      let sequenceNumber = 1001; // Default start number
-      if (latestStudent && latestStudent.studentId) {
-        // Safely parse the number part
-        const numPart = latestStudent.studentId.substring(prefix.length);
-        const currentNum = parseInt(numPart, 10);
-        if (!isNaN(currentNum)) { // Check if parsing was successful
-          sequenceNumber = currentNum + 1;
-        } else {
-           console.warn(`Could not parse sequence number from ${latestStudent.studentId}. Using default start.`);
-           // Optionally, query the count for this plan as a fallback
-           // const count = await User.countDocuments({ plan });
-           // sequenceNumber = 1001 + count;
-        }
-      }
-  
-      const regNumber = `${prefix}${sequenceNumber}`;
-      console.log(`Generated student registration number: ${regNumber}`);
-  
-      // --- !!! ENSURE THIS RETURN EXISTS !!! ---
-      // Return an object with the regNumber key
-      return { regNumber /*, batchNumber, batchName */ }; // Add batch info if needed later
-  
-    } catch (error) {
-      console.error("Error within getNextStudentId:", error);
-      // Throwing the error signals failure to the caller
-      throw new Error(`Failed to generate next student ID for plan ${plan}.`);
-      // Alternatively, return null/undefined, but the caller must check for it
-      // return undefined;
-    }
-  };
+
 // --- Register Route (Keep) ---
 router.post("/register", async (req, res) => {
-    try {
-        const { name, email, password, role, plan } = req.body;
+  try {
+      const { name, email, password, role, plan,adminKey } = req.body;
+      if (role === "admin") {
+        if (!adminKey || adminKey !== ADMIN_SECRET_KEY) {
+          return res.status(403).json({ message: "Invalid admin secret key" });
+        }
+      }
+      let registrationNumber = null;
 
-        // Use registrationNumber for studentId field as per your schema example?
-        let registrationNumber = null;
-        if (role !== "admin" && plan) {
-            try { // Inner try specifically for ID generation
-              const idResult = await getNextStudentId(plan); // Get the full result object
+      // Generate student ID if needed
+      if (role === "admin") {
+        registrationNumber = await getNextAdminId();
+      } else if (plan) {
+        const idResult = await getNextStudentId(plan);
+        if (!idResult?.regNumber) {
+          throw new Error("Student ID generation failed");
+        }
+        registrationNumber = idResult.regNumber;
+      }
+      // Check for existing user
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+          return res.status(400).json({ message: "Email already exists" });
+      }
+
+      // Create and save new user
+      const newUser = new User({
+          name,
+          email,
+          password,
+          role,
+          plan: role === "admin" ? undefined : plan,
+          studentId: registrationNumber
+      });
+
+      await newUser.save();
+
+      // Send welcome email AFTER successful registration
+
+          sendWelcomeEmail(
+              newUser.email, 
+              newUser.name, 
+              newUser.plan, 
+              newUser.studentId
+          ).catch(err => console.error("Email sending error:", err));
       
-              // --- Check if the helper function succeeded ---
-              if (!idResult || !idResult.regNumber) {
-                console.error("getNextStudentId did not return a valid result.");
-                throw new Error("Student ID generation failed internally.");
-              }
-              registrationNumber = idResult.regNumber;
-            }catch (idError) { // Catch errors specifically from getNextStudentId
-                console.error("Failed to get student ID during registration:", idError);
-                // Return a specific error to the client
-                return res.status(500).json({ message: "Server error generating student ID.", error: idError.message });
-              }
-            }
 
-        // Generate Admin ID only if role is admin
-        // You might not need adminId stored on the User model itself unless required elsewhere
-        // let adminId = null;
-        // if (role === "admin") { adminId = await getNextAdminId(); }
+      return res.status(201).json({ 
+        success: true,
+          message: "Registration successful",
+          studentId: registrationNumber 
+      });
 
-        // **Important**: Ensure password hashing happens here if not done in model pre-save hook
+  } catch (error) {
+      console.error("Registration error:", error);
+      
+      if (error.code === 11000) {
+          return res.status(400).json({  success: false,message: "Duplicate key error" });
+      }
+      if (error.name === 'ValidationError') {
+          return res.status(400).json({  success: false,message: "Validation failed" });
+      }
+      return res.status(500).json({  success: false,message: "Registration failed" });
+  }
+});
+       // **Important**: Ensure password hashing happens here if not done in model pre-save hook
         // const salt = await bcrypt.genSalt(10);
         // const hashedPassword = await bcrypt.hash(password, salt);
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            console.log(`Register Route: Email already exists: ${email}`);
-           return res.status(400).json({ message: "Email already exists." });
-        }
-    
-        const newUser = new User({
-            name,
-            email,
-            password, // Ensure this is hashed before saving (either here or via mongoose pre-save)
-            role,
-            plan: role === "admin" ? undefined : plan, // Admins might not have a plan
-            studentId:registrationNumber // Use registrationNumber field based on your model example
-            // studentId: registrationNumber, // If your field is named studentId
-        });
-        console.log(`Register Route: Prepared newUser object (before save):`, newUser.toObject()); // Log the object data
-
-        await newUser.save();
-
-         // Send welcome email after successful save
-        if (role !== "admin" && plan && registrationNumber) {
-            sendWelcomeEmail(newUser.email, newUser.name, newUser.plan, newUser.studentId)
-                .then(() => console.log(`📧 Email sent successfully to ${newUser.email}`))
-                .catch((err) => console.error("🚨 Email sending failed:", err));
-        }
-
-        res.status(201).json({ message: "Registration successful!" });
-
-    } catch (error) {
-        console.error("Register Route Error Caught:", error);
-        // Handle duplicate email error (code 11000)
-        if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
-            console.log("Register Route: Duplicate email detected by DB index.");
-            return res.status(400).json({ message: "Email already exists." });
-        }
-        if (error.keyPattern && error.keyPattern.studentId) {
-            console.log(`Register Route: Duplicate studentId detected by DB index. Attempted: ${error.keyValue?.studentId}`);
-            // This indicates an issue with the ID generation logic *despite* console logs
-            return res.status(400).json({ message: "Failed to generate unique student ID. Please try again." });
-       }
-        // Handle other potential unique indexes
-        console.log("Register Route: Duplicate key error on other field:", error.keyValue);
-      return res.status(400).json({ message: "Duplicate key error.", details: error.keyValue });
-    }
-   if (error.name === 'ValidationError') { // Mongoose validation error
-       const messages = Object.values(error.errors).map(err => err.message);
-       console.log("Register Route: Mongoose validation failed:", messages);
-       return res.status(400).json({ message: "Validation failed", errors: messages });
-   }
-   // --- End Specific Handling ---
-
-   res.status(500).json({ message: "Error registering user", error: error.message });
- }
-);
 
 
 
@@ -215,15 +198,30 @@ router.post("/login", async (req, res) => {
   try {
       const { email, password } = req.body;
       console.log(`[Login] Attempting login for: ${email}`);
-      const user = await User.findOne({ email }); // Get the full Mongoose document
+      const user = await User.findOne({ email }); 
 
-      if (!user) { /* ... handle not found ... */ }
-      console.log("[Login] User found.");
-
+      // const isMatch = await bcrypt.compare(password, user.password);
+      if (!user) {
+        console.log("[Login] Failed: User not found.");
+        return res.status(400).json({ message: "Invalid credentials" });
+      }
+      console.log("[Login] User found. Checking password...");
+      console.log("[Login] Password from Request Body:", password); // Log password received
+      console.log("[Login] Hashed Password from DB:", user.password);
       const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) { /* ... handle mismatch ... */ }
-      console.log("[Login] Password matched.");
+      // --- !!! END CRITICAL PART !!! ---
 
+      console.log(`[Login] bcrypt.compare result (isMatch): ${isMatch}`); // Log the result of the comparison
+
+      // --- !!! CHECK THIS IF CONDITION !!! ---
+      if (!isMatch) {
+          console.log("[Login] Failed: Password mismatch.");
+          // IMPORTANT: Use the SAME generic error message
+          return res.status(400).json({ message: "Invalid credentials" });
+      }
+      // --- !!! END CHECK ---
+
+      console.log("[Login] Password matched.");
       // --- Record Login Event ---
       try {
           console.log(`[Login] Preparing history record. User object found: ${!!user}`); // Confirm user object exists
@@ -250,7 +248,7 @@ router.post("/login", async (req, res) => {
 
       } catch (historyError) {
           console.error("🔥🔥🔥 [Login] CRITICAL FAILURE: Error recording login history:", historyError);
-          console.error(historyError); // Log full error object
+          console.error(historyError);
       }
       // --- End Record Login Event ---
 

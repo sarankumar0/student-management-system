@@ -1,208 +1,220 @@
+// src/component/Dashboard.jsx (New or Existing File)
 
-// import Cookies from "js-cookie";
-// import { useState, useEffect } from "react";
-// import Chart from "react-apexcharts";
-// import { FaBullhorn, FaUser,FaIdCard,FaBook, FaEnvelope, FaBookOpen, FaClipboardList, FaCalendarAlt, FaTrophy, FaFire, FaChartLine } from "react-icons/fa";
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useNavigate, Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner, faExclamationTriangle, faUser, faBookOpen, faClipboardList, faEdit, faCalendarCheck, faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import Chart from 'react-apexcharts'; // Use ApexCharts
 
-// const Dashboard = () => {
-//   const [user, setUser] = useState(null);
-//   const [loading, setLoading] = useState(true);
-//   const registrationNumber = Cookies.get("registrationNumber") || "N/A";
+// Reusable Badge Component (if not imported globally)
+const AccessTypeBadge = ({ accessType }) => (
+     <span className={`inline-block text-xs text-white px-2 py-0.5 rounded-full capitalize font-medium leading-none ml-2 ${ accessType?.toLowerCase() === 'pro' ? 'bg-indigo-600' : accessType?.toLowerCase() === 'classic' ? 'bg-purple-500' : accessType?.toLowerCase() === 'basic' ? 'bg-teal-500' : 'bg-gray-500' }`}>
+        {accessType || 'N/A'}
+    </span>
+);
 
-//   useEffect(() => {
-//     const userData = Cookies.get("user");
-//     if (userData) {
-//       setUser(JSON.parse(userData));
-//     }
-//     setLoading(false);
-//   }, []);
-
-//   const [announcements, setAnnouncements] = useState([
-//     "📢 Midterm exams start next Monday!",
-//     "🚀 New internship opportunities available!",
-//     "📜 Assignment deadlines updated."
-//   ]);
-//   const [messages, setMessages] = useState([
-//     "📩 Your advisor sent a meeting request.",
-//     "🎉 Welcome to the new semester!",
-//     "📅 Exam schedule has been updated."
-//   ]);
-//   const [gpaData, setGpaData] = useState([3.5, 3.8, 3.6, 3.9, 4.0]);
-//   const [attendanceData, setAttendanceData] = useState([90, 85, 88, 92, 95]);
-
-//   if (loading) {
-//     return <p className="text-center text-blue-500">Loading user data...</p>;
-//   }
-
-//   if (!user) {
-//     return <p className="text-center text-red-500">User data not available.</p>;
-//   }
-
-//   return (
-//     <div className="flex flex-col">
-//       {/* Welcome Section */}
-//       {/* <div className="w-full mx-5 mx-auto mt-4 p-4 bg-white rounded-lg shadow-md">
-//   <h1 className="text-2xl font-bold mb-3 flex items-center gap-2">
-//     <FaUser className="text-blue-500 text-lg" /> 
-//     Welcome, <span className="text-indigo-600">{user.name || "Student"}</span>
-//   </h1>
-
-//   <div className="space-y-3 text-base text-gray-700">
-//     <p className="flex items-center gap-2">
-//       <FaEnvelope className="text-green-500 text-sm" />
-//       <b>Email:</b> {user.email || "N/A"}
-//     </p>
-//     <p className="flex items-center gap-2">
-//       <FaIdCard className="text-red-500 text-sm" />
-//       <b>Student ID:</b> {registrationNumber}
-//     </p>
-//     <p className="flex items-center gap-2">
-//       <FaBook className="text-yellow-500 text-sm" />
-//       <b>Plan:</b> {user.plan ? user.plan.toUpperCase() : "BASIC"}
-//     </p>
-//     <p className="flex items-center gap-2 text-gray-500">
-//       <FaCalendarAlt className="text-blue-400 text-sm" />
-//       📅 Today: {new Date().toLocaleDateString()}
-//     </p>
-//   </div>
-// </div> */}
-// <div
-//   className="w-full mx-1 mx-auto mt-6 p-1 rounded-lg shadow-lg relative"
-//   style={{
-//     background: "linear-gradient(135deg, #6C63FF, #C850C0)", // Purple-pink gradient
-//     borderRadius: "12px",
-//   }}
-// >
-//   <div
-//     className="ps-6 py-2 rounded-xl"
-//     style={{
-//       background: "linear-gradient(135deg, #6C63FF, #C850C0)", // Gradient inside
-//       color: "#fff", // White text for contrast
-//       boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)", // Soft shadow
-//     }}
-//   >
-//     <h1 className="text-3xl font-bold mb-4 flex items-center gap-2">
-//       {/* <FaUser className="text-yellow-300 text-lg drop-shadow-lg" /> */}
-//       Welcome,{" "}
-//       <span className="font-semibold text-white">
-//         {user.name ? user.name : "Student"}
-//       </span>
-//     </h1>
-
-//     <div className="space-y-1 text-lg">
-//       {/* <p className="flex items-center gap-3">
-//         <FaIdCard className="text-red-300 text-base drop-shadow-md" />
-//         <b className="text-gray-100">Student ID:</b> {registrationNumber}
-//       </p> */}
-//       <p className="flex items-center gap-3">
-//         {/* <FaBook className="text-yellow-400 text-base drop-shadow-md" /> */}
-//         <b className="text-gray-100">You are at {user.plan ? user.plan.toUpperCase() : "BASIC"} plan</b>
-//       </p>
-//       <p className="flex items-center gap-3">
-//         {/* <FaCalendarAlt className="text-blue-300 text-base drop-shadow-md" /> */}
-//         <b className="text-gray-100">Date:</b> {new Date().toLocaleDateString()}
-//       </p>
-//     </div>
-//   </div>
-// </div>
+// Format Date helper
+const formatDate = (dateString) => {
+     if (!dateString) return 'N/A';
+     try { return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+     catch (e) { return 'Invalid Date'; }
+ };
 
 
-//       {/* Performance & Announcements */}
-//       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 my-6">
-//         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center text-center">
-//           <FaChartLine size={30} className="text-purple-500 mb-2" />
-//           <h2 className="text-lg font-semibold">Performance Summary</h2>
-//           <p className="text-gray-600">Your overall GPA is {gpaData[gpaData.length - 1]} 🎯</p>
-//         </div>
-//         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center text-center">
-//           <FaCalendarAlt size={30} className="text-blue-500 mb-2" />
-//           <h2 className="text-lg font-semibold">Upcoming Deadlines</h2>
-//           <p className="text-gray-600">2 Assignments due this week</p>
-//         </div>
-//         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center text-center">
-//           <FaTrophy size={30} className="text-yellow-500 mb-2" />
-//           <h2 className="text-lg font-semibold">Achievements</h2>
-//           <p className="text-gray-600">Top scorer in Mathematics!</p>
-//         </div>
-//         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center text-center">
-//           <FaFire size={30} className="text-red-500 mb-2" />
-//           <h2 className="text-lg font-semibold">Trending Discussions</h2>
-//           <p className="text-gray-600">Best study strategies for exams</p>
-//         </div>
-//       </div>
+function Dashboard() {
+    const [dashboardData, setDashboardData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const navigate = useNavigate();
 
-//       {/* Charts Section */}
-//       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
-//         <div className="bg-white p-6 rounded-lg shadow-md">
-//           <h2 className="text-lg font-semibold mb-4">📊 GPA Progress</h2>
-//           <Chart
-//             type="line"
-//             series={[{ name: "GPA", data: gpaData }]}
-//             options={{
-//               chart: { id: "gpa-chart" },
-//               xaxis: { categories: ["Sem 1", "Sem 2", "Sem 3", "Sem 4", "Sem 5"] }
-//             }}
-//             height={250}
-//           />
-//         </div>
-//         <div className="bg-white p-6 rounded-lg shadow-md">
-//           <h2 className="text-lg font-semibold mb-4">✅ Attendance (%)</h2>
-//           <Chart
-//             type="bar"
-//             series={[{ name: "Attendance", data: attendanceData }]}
-//             options={{
-//               chart: { id: "attendance-chart" },
-//               xaxis: { categories: ["Jan", "Feb", "Mar", "Apr", "May"] }
-//             }}
-//             height={250}
-//           />
-//         </div>
-//       </div>
-
-//       {/* Announcements & Messages */}
-//       <div className="grid mb-5 grid-cols-1 md:grid-cols-2 gap-6">
-//         <div className="bg-white p-6 rounded-lg shadow-md">
-//           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><FaBullhorn /> Announcements</h2>
-//           <div className="h-24 overflow-auto">
-//             {announcements.map((announcement, index) => (
-//               <p key={index} className="text-gray-700 py-1">{announcement}</p>
-//             ))}
-//           </div>
-//         </div>
-//         <div className="bg-white p-6 rounded-lg shadow-md">
-//           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><FaEnvelope /> Messages</h2>
-//           <div className="h-24 overflow-auto">
-//             {messages.map((message, index) => (
-//               <p key={index} className="text-gray-700 py-1">{message}</p>
-//             ))}
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* Quick Access Buttons */}
-//       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
-//         <button className="bg-indigo-600 text-white p-4 rounded-lg shadow-md flex items-center justify-center gap-2 hover:bg-indigo-700 transition">
-//           <FaBookOpen size={20} /> View Marksheet
-//         </button>
-//         <button className="bg-green-600 text-white p-4 rounded-lg shadow-md flex items-center justify-center gap-2 hover:bg-green-700 transition">
-//           <FaClipboardList size={20} /> Exam Timetable
-//         </button>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Dashboard;
+    // --- State for Charts ---
+    const [progressOptions, setProgressOptions] = useState({
+        chart: { type: 'radialBar', height: 200 },
+        plotOptions: {
+             radialBar: {
+                 hollow: { size: '60%' },
+                 dataLabels: {
+                     name: { show: true, fontSize: '14px', offsetY: -5, color: '#6b7280'}, // Gray color for label
+                     value: { show: true, fontSize: '20px', fontWeight: 'bold', offsetY: 5, formatter: function (val) { return val + "%" } }
+                  }
+             }
+         },
+        labels: ['Overall Progress'],
+        colors: ['#4f46e5'] // Indigo color for progress
+     });
+    const [progressSeries, setProgressSeries] = useState([0]);
 
 
-import StudentWelcomeCard from './StudentWelcomeCard'
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            setLoading(true);
+            setError(null);
+            const token = localStorage.getItem('authToken');
+            if (!token) { setError("Authentication required."); setLoading(false); return; }
+            const config = { headers: { Authorization: `Bearer ${token}` } };
 
-const Dashboard = () => {
-  return (
-   <>
-   <StudentWelcomeCard/>
-   </>
-  )
+            try {
+                // Fetch the consolidated dashboard data
+                const response = await axios.get('http://localhost:5000/api/student/dashboard', config);
+                console.log("Student Dashboard Data Received:", response.data);
+                setDashboardData(response.data);
+
+                // --- Update Progress Chart State ---
+                 if (response.data && response.data.progress) {
+                     const { completedLessonsTotal = 0, totalEnrolledLessons = 0 } = response.data.progress;
+                     const percentage = (totalEnrolledLessons > 0)
+                         ? Math.round((completedLessonsTotal / totalEnrolledLessons) * 100)
+                         : 0;
+                     console.log(`Calculated Progress: ${completedLessonsTotal}/${totalEnrolledLessons} = ${percentage}%`);
+                     setProgressSeries([percentage]); // Update radial bar series
+                 } else {
+                     setProgressSeries([0]); // Default to 0 if no progress data
+                 }
+
+            } catch (err) {
+                console.error("Error fetching student dashboard data:", err);
+                setError(err.response?.data?.message || "Failed to load dashboard data.");
+                setDashboardData(null);
+                 setProgressSeries([0]); // Reset chart on error
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDashboardData();
+    }, []); // Fetch once on mount
+
+    // Helper to render upcoming items
+    const renderUpcomingItem = (item, type) => {
+         const linkPath = type === 'assignment' ? `/courses/assignments` : `/exams/timetable`; // Link to list pages for now
+         const dueDate = item.dueDate || item.date; // Use correct date field
+         const title = item.title;
+         return (
+             <Link to={linkPath} key={item._id} className="block p-2 hover:bg-gray-100 rounded text-sm">
+                 <div className='flex justify-between items-center'>
+                     <span className='text-gray-700 truncate mr-2'>{title}</span>
+                     {dueDate && <span className='text-xs text-red-600 flex-shrink-0'><FontAwesomeIcon icon={faCalendarCheck} className='mr-1'/> Due: {formatDate(dueDate)}</span>}
+                 </div>
+             </Link>
+         );
+     };
+
+     // Helper to render recent courses
+     const renderRecentCourse = (course) => (
+         <Link to={`/student/course/${course._id}`} key={course._id} className="block bg-white p-3 rounded shadow hover:shadow-md transition-shadow text-sm">
+              <img
+                  src={`http://localhost:5000${course.thumbnailUrl || '/uploads/course_thumbnails/default_course.png'}`}
+                  alt="" // Alt text should be descriptive if possible
+                  className="w-full h-20 object-cover rounded mb-2"
+                  onError={(e) => { e.target.onerror = null; e.target.src='http://localhost:5000/uploads/course_thumbnails/default_course.png'; }}
+              />
+              <span className="font-medium text-gray-800 hover:text-indigo-600 line-clamp-2">{course.title}</span>
+         </Link>
+      );
+
+    // --- Render Logic ---
+    if (loading) {
+        return <div className="flex justify-center items-center p-10"><FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-indigo-600" /> Loading Dashboard...</div>;
+    }
+
+    if (error) {
+        return <div className="m-4 p-4 bg-red-100 text-red-700 border border-red-400 rounded"><FontAwesomeIcon icon={faExclamationTriangle} className="mr-2" /> Error: {error}</div>;
+    }
+
+    if (!dashboardData) {
+         return <div className="m-4 p-4 bg-yellow-100 text-yellow-700 border border-yellow-400 rounded">Could not load dashboard information.</div>;
+    }
+
+    // --- Main Dashboard Display ---
+    return (
+        <div className="p-4 md:p-6 space-y-8">
+            {/* Welcome Banner */}
+            <div className="p-5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg shadow-lg flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold mb-1">Welcome back, {dashboardData.welcomeName}!</h1>
+                    <p className="text-indigo-100">Ready to continue your learning journey?</p>
+                </div>
+                <div className="text-right">
+                     <span className='text-sm opacity-90'>Current Plan</span><br/>
+                     <span className='font-semibold text-lg capitalize'>{dashboardData.plan}</span>
+                 </div>
+            </div>
+
+            {/* Grid for Stats & Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Overall Progress Chart */}
+                <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center justify-center h-48">
+                     <h3 className="text-md font-semibold text-gray-600 mb-2">Overall Course Progress</h3>
+                     <Chart options={progressOptions} series={progressSeries} type="radialBar" height="160" />
+                </div>
+
+                {/* Quiz Stats */}
+                <div className="bg-white p-4 rounded-lg shadow flex flex-col justify-center h-48">
+                     <h3 className="text-md font-semibold text-gray-600 mb-3">Quiz Status</h3>
+                     <div className='text-center'>
+                         <p className='text-3xl font-bold text-indigo-600'>{dashboardData.counts?.quizzesAvailable ?? 'N/A'}</p>
+                         <p className='text-sm text-gray-500 mb-2'>Available</p>
+                         <p className='text-sm text-gray-500'>
+                            Completed: <span className='font-medium'>{dashboardData.counts?.completedQuizzes ?? 'N/A'}</span>
+                         </p>
+                         <Link to="/exams/TakeQuiz" className="mt-3 inline-block text-xs text-indigo-600 hover:underline">View Quizzes →</Link>
+                     </div>
+                </div>
+
+                {/* Assignment Stats */}
+                <div className="bg-white p-4 rounded-lg shadow flex flex-col justify-center h-48">
+                     <h3 className="text-md font-semibold text-gray-600 mb-3">Assignments</h3>
+                      <div className='text-center'>
+                         <p className='text-3xl font-bold text-indigo-600'>{dashboardData.counts?.assignmentsDueTotal ?? 'N/A'}</p>
+                         <p className='text-sm text-gray-500 mb-2'>Total Assigned</p>
+                         <p className='text-sm text-gray-500'>
+                            Due Soon: <span className='font-medium'>{dashboardData.upcoming?.assignments?.length ?? '0'}</span>
+                         </p>
+                         <Link to="/courses/assignments" className="mt-3 inline-block text-xs text-indigo-600 hover:underline">View Assignments →</Link>
+                     </div>
+                </div>
+            </div>
+
+            {/* Grid for Upcoming & Recent */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 {/* Upcoming Deadlines & Schedule */}
+                 <div className="bg-white p-4 rounded-lg shadow">
+                      <h3 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Upcoming Schedule</h3>
+                      {(dashboardData.upcoming?.assignments?.length > 0 || dashboardData.upcoming?.timetable?.length > 0) ? (
+                         <ul className="space-y-1">
+                             {dashboardData.upcoming?.assignments?.map(item => renderUpcomingItem(item, 'assignment'))}
+                             {dashboardData.upcoming?.timetable?.map(item => renderUpcomingItem(item, 'timetable'))}
+                         </ul>
+                       ) : (
+                          <p className="text-sm text-gray-500 italic">No upcoming deadlines or scheduled events found.</p>
+                       )}
+                  </div>
+
+                  {/* Recent/Continue Courses */}
+                  <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Recently Added Courses</h3>
+                       {dashboardData.recent?.aiCourses?.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-3">
+                              {dashboardData.recent.aiCourses.map(course => renderRecentCourse(course))}
+                           </div>
+                        ) : (
+                           <p className="text-sm text-gray-500 italic">No new courses recently added.</p>
+                        )}
+                  </div>
+            </div>
+
+             {/* Optional: Recent Events/Internships - Conditionally Render */}
+             {(dashboardData.recent?.events?.length > 0 || dashboardData.recent?.internships?.length > 0) && (
+                  <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Opportunities & Events</h3>
+                       {/* TODO: Render Events and Internships here */}
+                       <p className="text-sm text-gray-500 italic">Display recent events/internships here...</p>
+                  </div>
+              )}
+
+        </div>
+    );
 }
 
-export default Dashboard
+export default Dashboard;

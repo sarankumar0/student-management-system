@@ -108,39 +108,6 @@ router.post("/videos", upload.single("file"), async (req, res) => {
  }
 });
 
-
-// Update Course Material
-// router.put("/:id", upload.single("file"), async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { title, batch, accessType } = req.body;
-//     const material = await CourseMaterial.findById(id);
-
-//     if (!material) return res.status(404).json({ message: "Material not found" });
-
-//     // Update fields
-//     material.title = title || material.title;
-//     material.batch = batch || material.batch;
-//     material.accessType = accessType || material.accessType;
-
-//     // If a new file is uploaded, replace the old file
-//     if (req.file) {
-//       if (material.fileUrl) {
-//         const oldFilePath = path.join(__dirname, "..", material.fileUrl);
-//         fs.unlink(oldFilePath, (err) => {
-//           if (err) console.log("Failed to delete old file:", err);
-//         });
-//       }
-//       material.fileUrl = `/uploads/${req.file.filename}`;
-//     }
-
-//     await material.save();
-//     res.json({ message: "Material updated successfully", material });
-//   } catch (err) {
-//     res.status(500).json({ message: "Error updating material", error: err.message });
-//   }
-// });
-
 router.patch("/:id", upload.single("file"), async (req, res) => { // <--- Use .patch here
   try {
     const { id } = req.params;
@@ -245,27 +212,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Get Materials by Batch
-// router.get("/:batch", async (req, res) => {
-//   try {
-//     const { batch } = req.params;
-//     let filter = {};
-
-//     if (batch.toLowerCase() === "basic") {
-//       filter = { batch: "basic" };
-//     } else if (batch.toLowerCase() === "classic") {
-//       filter = { batch: { $in: ["basic", "classic"] } };
-//     } else {
-//       filter = { batch: { $in: ["basic", "classic", "pro"] } };
-//     }
-
-//     const materials = await CourseMaterial.find(filter);
-//     res.json(materials);
-//   } catch (err) {
-//     res.status(500).json({ message: "Error fetching materials", error: err.message });
-//   }
-// });
-
 router.get("/:batch", async (req, res) => { // Path changed
   console.log(`GET /api/pdfs/${req.params.batch} route hit!`);
   try {
@@ -298,11 +244,9 @@ router.get("/:batch", async (req, res) => { // Path changed
   }
 });
 
-router.get('/download/:filename', verifyToken, async (req, res) => { // Add verifyToken middleware
+router.get('/download/:filename', verifyToken, async (req, res) => { 
   try {
       const filename = req.params.filename;
-
-      // Basic security: Prevent directory traversal attacks
       if (filename.includes('..')) {
           return res.status(400).send('Invalid filename.');
       }
@@ -332,6 +276,34 @@ router.get('/download/:filename', verifyToken, async (req, res) => { // Add veri
   } catch (error) {
       console.error("Error during file download:", error);
       res.status(500).send('Server error during file download.');
+  }
+});
+
+router.get('/preview/:filename', verifyToken, async (req, res) => {
+  try {
+    const token = req.query.token || req.headers['authorization']?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+    const filename = req.params.filename;
+    if (filename.includes('..')) {
+      return res.status(400).send('Invalid filename.');
+    }
+
+    const filePath = path.join(__dirname, '..', 'uploads', 'pdfs', filename);
+    console.log(`Attempting to preview file: ${filePath}`);
+
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/pdf');
+
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } else {
+      console.log(`File not found for preview: ${filePath}`);
+      res.status(404).send('File not found.');
+    }
+  } catch (error) {
+    console.error("Error during file preview:", error);
+    res.status(500).send('Server error during file preview.');
   }
 });
 

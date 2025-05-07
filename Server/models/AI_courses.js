@@ -97,8 +97,13 @@ const courseSchema = new Schema({
     },
     // Optional: Store the initial prompt topic for reference
     // initialTopic: { type: String }
+    thumbnailUrl: {
+        type: String,
+        trim: true,
+        default: '/uploads/course_thumbnails/default_course.png' // Optional default image path
+    },
 
-}, { timestamps: true }); // Adds createdAt and updatedAt
+}, { timestamps: true }); 
 
 // Index for potential searches
 courseSchema.index({ title: 'text', description: 'text' });

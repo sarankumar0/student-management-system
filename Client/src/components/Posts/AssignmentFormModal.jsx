@@ -6,14 +6,6 @@ import { faTimes, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Expects props:
-// - isOpen: boolean
-// - onClose: function
-// - onSubmit: function (receives FormData)
-// - initialData: object (assignment data for editing, null for creating)
-// - isEditing: boolean
-// - isLoading: boolean (optional, for submit button state)
-
 function AssignmentFormModal({ isOpen, onClose, onSubmit, initialData, isEditing = false, isLoading = false }) {
     const [formData, setFormData] = useState({
         title: '',

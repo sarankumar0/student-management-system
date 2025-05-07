@@ -14,7 +14,13 @@ const AssignmentSubmission = require('../models/AssignmentSubmission');
 const Assignment = require('../models/Assignment')
 const User=require('../models/User');
 const { verifyToken } = require('./authRoutes');
+const AICourse = require('../models/AI_courses');
+const AICourseProgress = require('../models/AICourseProgress');
 
+let TimetableEntry, Event, Internship;
+try { TimetableEntry = require('../models/TimetableEntry'); } catch (e) { console.log("TimetableEntry model not found, skipping."); }
+try { Event = require('../models/Event'); } catch (e) { console.log("Event model not found, skipping."); }
+try { Internship = require('../models/Internship'); } catch (e) { console.log("Internship model not found, skipping."); }
 const submissionStorage = multer.diskStorage({
     destination: function (req, file, cb) {
         // Create a subdirectory for each assignment's submissions
@@ -59,11 +65,141 @@ const uploadSubmission = multer({
 }).single('submissionFile'); // Expecting file in 'submissionFile' field from frontend form
 
 // --- End Multer Setup ---
+router.get('/dashboard', verifyToken, async (req, res) => {
+    const studentId = req.user?._id;
+    const studentPlan = req.user?.plan?.toLowerCase();
+    const studentName = req.user?.name;
+
+    console.log(`--- Request: GET /api/student/dashboard ---`);
+    console.log(`User: ${req.user?.email}, Plan: ${studentPlan}`);
+
+    if (!studentPlan || !['basic', 'classic', 'pro'].includes(studentPlan)) {
+        return res.status(403).json({ message: 'Invalid user data for dashboard.' });
+    }
+
+    try {
+        // --- Filters based on plan ---
+        let courseMaterialFilter = { status: 'published' }; // Base filter for published content
+        if (studentPlan === 'basic') { courseMaterialFilter.accessType = 'basic'; }
+        else if (studentPlan === 'classic') { courseMaterialFilter.accessType = { $in: ['basic', 'classic'] }; }
+        else if (studentPlan === 'pro') { courseMaterialFilter.accessType = { $in: ['basic', 'classic', 'pro'] }; }
+
+        const quizFilter = { accessType: studentPlan, status: 'published' }; // Exact match for quiz, assume status field exists? Add if needed.
+        const assignmentFilter = { ...courseMaterialFilter }; // Assignments use cascading access
+        const timetableFilter = { ...courseMaterialFilter }; // Assume Timetable uses cascading access? Adjust if not.
+        const eventFilter = { ...courseMaterialFilter }; // Assume Events use cascading access?
+        const internshipFilter = { ...courseMaterialFilter }; // Assume Internships use cascading access?
 
 
+        // --- Prepare Date Filters ---
+        const today = new Date();
+        const weekLater = new Date(today);
+        weekLater.setDate(today.getDate() + 7);
+        today.setHours(0, 0, 0, 0); // Start of today
+
+        weekLater.setHours(23, 59, 59, 999); // End of 7 days later
+
+        const upcomingAssignmentFilter = { ...assignmentFilter, dueDate: { $gte: today, $lt: weekLater } };
+         const upcomingTimetableFilter = TimetableEntry ? { ...timetableFilter, date: { $gte: today } } : null; // Only if model exists
 
 
-router.get('/dashboard', verifyToken, async (req, res) => { // <-- USE MIDDLEWARE
+        // --- Fetch ALL data concurrently ---
+        const promises = [
+            AICourse.find(courseMaterialFilter).select('title thumbnailUrl createdAt modules').sort({ createdAt: -1 }).lean(), // 0: AI Courses
+            Assignment.find(assignmentFilter).select('title dueDate').lean(), // 1: All Assignments (for count)
+            Quiz.find(quizFilter).select('_id').lean(), // 2: All Quizzes (for count)
+            QuizSubmission.countDocuments({ student: studentId }), // 3: Count completed quizzes
+            AICourseProgress.find({ student: studentId }).select('course completedLessons').lean(), // 4: All Course Progress
+            Assignment.find(upcomingAssignmentFilter).select('title dueDate _id').sort({ dueDate: 1 }).limit(5).lean(), // 5: Upcoming Assignments
+        ];
+
+        // Conditionally add fetches for optional models
+        if (TimetableEntry && upcomingTimetableFilter) {
+            promises.push(TimetableEntry.find(upcomingTimetableFilter).select('title subject date time _id').sort({ date: 1, time: 1 }).limit(3).lean()); // 6: Upcoming Timetable
+        } else { promises.push(Promise.resolve([])); } // Placeholder resolved promise
+
+        if (Event) {
+            promises.push(Event.find(eventFilter).select('title date _id').sort({ date: -1 }).limit(3).lean()); // 7: Recent Events
+        } else { promises.push(Promise.resolve([])); }
+
+        if (Internship) {
+            promises.push(Internship.find(internshipFilter).select('title company _id').sort({ createdAt: -1 }).limit(3).lean()); // 8: Recent Internships
+        } else { promises.push(Promise.resolve([])); }
+
+
+        // --- Execute all fetches ---
+        const results = await Promise.all(promises);
+
+        // --- Process Results ---
+        const aiCourses = results[0] || [];
+        const allAssignments = results[1] || [];
+        const availableQuizzes = results[2] || [];
+        const completedQuizzesCount = results[3] || 0;
+        const courseProgressList = results[4] || [];
+        const upcomingAssignments = results[5] || [];
+        const upcomingTimetable = results[6] || [];
+        const recentEvents = results[7] || [];
+        const recentInternships = results[8] || [];
+
+        // Calculate Progress Stats
+        let completedLessonsTotal = 0;
+        courseProgressList.forEach(p => { completedLessonsTotal += p.completedLessons?.length || 0; });
+
+        let totalEnrolledLessons = 0;
+        aiCourses.forEach(course => {
+             course.modules?.forEach(module => {
+                 totalEnrolledLessons += module.lessons?.length || 0;
+             });
+         });
+
+        // Extract recent courses for display
+        const recentAICourses = aiCourses.slice(0, 3).map(c => ({ // Take first 3 (newest)
+            _id: c._id, title: c.title, thumbnailUrl: c.thumbnailUrl
+        }));
+
+        // --- Construct Final Response Object ---
+        const dashboardData = {
+            welcomeName: studentName || 'Student',
+            plan: studentPlan,
+            counts: {
+                aiCoursesAvailable: aiCourses.length,
+                assignmentsDueTotal: allAssignments.length,
+                quizzesAvailable: availableQuizzes.length,
+                completedQuizzes: completedQuizzesCount,
+                // Add counts for timetable/events/internships if needed
+            },
+            progress: { // Data for progress chart
+                completedLessonsTotal: completedLessonsTotal,
+                totalEnrolledLessons: totalEnrolledLessons,
+            },
+            upcoming: { // Data for upcoming section
+                assignments: upcomingAssignments,
+                timetable: upcomingTimetable,
+            },
+            recent: { // Data for recent section
+                aiCourses: recentAICourses,
+                events: recentEvents,
+                internships: recentInternships,
+            }
+            // Add lastAccessed later if needed
+        };
+
+        res.status(200).json(dashboardData);
+
+    } catch (error) {
+        console.error(`Server Error fetching dashboard for student ${req.user?.email}:`, error);
+        res.status(500).json({ message: 'Server error while retrieving dashboard data.', error: error.message });
+    }
+}); 
+
+
+router.get('/course-materials', verifyToken, async (req, res) => { 
+    const studentPlan = req.user?.plan?.toLowerCase();
+    console.log(`--- Request: GET /api/student/course-materials ---`);
+    console.log(`User: ${req.user?.email}, Plan: ${studentPlan}`);
+    if (!studentPlan || !['basic', 'classic', 'pro'].includes(studentPlan) ) {
+        return res.status(403).json({ message: 'Invalid user data for dashboard.' });
+    }
     try {
         console.log("--- /api/student/dashboard ---");
         console.log("req.user received:", JSON.stringify(req.user, null, 2)); // Log the whole user object
@@ -511,9 +647,6 @@ router.get('/submissions',verifyToken,async(req,res)=>{
     }
 });
 
-// --- Add other student-specific routes later ---
-// POST /api/quizzes/:quizId/submit       (will also use verifyToken)
-// GET /api/student/submissions         (will also use verifyToken)
 router.get('/assignments', verifyToken, async (req, res) => {
     // 1. Extract student info from verified token
     const studentId = req.user?._id;
@@ -709,7 +842,255 @@ router.post('/assignments/:assignmentId/submit', verifyToken, (req, res) => {
             res.status(500).json({ message: 'Server error saving submission.', error: error.message });
         }
     }); // End of uploadSubmission callback
-}); // End of router.post
+}); 
+
+//For Ai Related
+//Courses
+
+
+router.get('/ai-courses', verifyToken, async (req, res) => {
+    console.log(">>> HIT: /api/student/ai-courses Handler <<<");
+    const studentId = req.user?._id;
+    const studentPlan = req.user?.plan?.toLowerCase();
+    console.log(`--- Request: GET /api/student/ai-courses ---`);
+    console.log(`User: ${req.user?.email}, Plan: ${studentPlan}`);
+
+    // Validate student plan
+    if (!studentPlan || !['basic', 'classic', 'pro'].includes(studentPlan)) {
+        console.error(`Authorization Error: Invalid or missing plan ('${studentPlan}') for user ${req.user?.email}`);
+        return res.status(403).json({ message: 'Cannot determine eligibility: User plan invalid or missing.' });
+    }
+    if (!studentId) {
+       console.error('student Id doesnt exist:401');
+    }
+
+    try {
+        // --- Filter for AI Courses (Cascading Logic) ---
+        let courseAccessFilter = {};
+        if (studentPlan === 'basic') {
+            courseAccessFilter = { accessType: 'basic' };
+        } else if (studentPlan === 'classic') {
+            courseAccessFilter = { accessType: { $in: ['basic', 'classic'] } };
+        } else if (studentPlan === 'pro') {
+            // Pro gets everything
+            courseAccessFilter = { accessType: { $in: ['basic', 'classic', 'pro'] } };
+        }
+        // Add filter to only show 'published' courses
+        courseAccessFilter.status = 'published'; // <-- IMPORTANT: Only show published courses
+        // --------------------------------------------
+
+        console.log(`AI Course Filter constructed:`, JSON.stringify(courseAccessFilter, null, 2));
+
+        // 1. Find Published AI_Course documents matching the filter for the student's plan
+        // Fetch fields needed for display AND the full modules/lessons for counting total lessons
+        const availableCourses = await AICourse.find(courseAccessFilter)
+            .select('title description accessType thumbnailUrl createdAt modules') // Get modules/lessons needed for count
+            .sort({ createdAt: -1 })
+            .lean(); // Use lean as we're primarily reading and transforming
+
+        console.log(`Found ${availableCourses.length} published AI courses for student plan ${studentPlan} and lower.`);
+
+        if (availableCourses.length === 0) {
+             // No courses available, return empty array
+             return res.status(200).json({ courses: [] });
+         }
+
+        // 2. Get Course IDs for progress lookup
+        const courseIds = availableCourses.map(course => course._id);
+
+        // 3. Fetch Progress Records for this student and these courses
+        console.log(`Fetching progress for student ${studentId} for course IDs:`, courseIds);
+        const progressRecords = await AICourseProgress.find({
+            student: studentId,
+            course: { $in: courseIds } // Find progress only for the courses being listed
+        })
+        .select('course completedLessons') // Select only needed fields
+        .lean();
+
+        // Create a Map for easy lookup: { courseIdString => completedLessonCount }
+        const progressMap = new Map();
+        progressRecords.forEach(record => {
+            progressMap.set(record.course.toString(), record.completedLessons?.length || 0);
+        });
+        console.log("Progress Map created:", progressMap);
+
+        // 4. Combine Course Data with Progress Percentage
+        const coursesWithProgress = availableCourses.map(course => {
+            // Calculate total lessons for this course
+            let totalLessons = 0;
+            course.modules?.forEach(module => {
+                totalLessons += module.lessons?.length || 0;
+            });
+
+            // Get completed count from map
+            const completedCount = progressMap.get(course._id.toString()) || 0;
+
+            // Calculate percentage
+            const completionPercentage = (totalLessons > 0)
+                ? Math.round((completedCount / totalLessons) * 100)
+                : 0; // Avoid division by zero if course has no lessons
+
+            console.log(`Course: ${course.title}, Total Lessons: ${totalLessons}, Completed: ${completedCount}, Percentage: ${completionPercentage}%`);
+
+            // Return object for the frontend list
+            return {
+                _id: course._id,
+                title: course.title,
+                description: course.description,
+                accessType: course.accessType,
+                thumbnailUrl: course.thumbnailUrl,
+                createdAt: course.createdAt,
+                moduleCount: course.modules ? course.modules.length : 0,
+                completionPercentage: completionPercentage // <-- Add percentage
+            };
+        });
+
+        // 5. Send the combined data
+        res.status(200).json({ courses: coursesWithProgress });
+
+    } catch (error) {
+        console.error(`Server Error fetching AI courses for student ${req.user?.email}:`, error);
+        res.status(500).json({ message: 'Server error while retrieving AI courses.', error: error.message });
+    }
+});
+router.get('/:id', verifyToken, async (req, res) => { 
+    console.log(`>>> HIT: /api/ai-courses/:id Handler with id=${req.params.id} <<<`);
+    const { id } = req.params;
+    const userRole = req.user?.role;
+    const studentPlan = req.user?.plan?.toLowerCase();
+
+    console.log(`--- Request: GET /api/ai-courses/${id} ---`);
+    console.log(`User: ${req.user?.email}, Role: ${userRole}, Plan: ${studentPlan}`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid Course ID format.' });
+    }
+
+    try {
+        // Fetch full course
+        const course = await Course.findById(id).lean(); // Use lean if just reading
+
+        if (!course) {
+            return res.status(404).json({ message: 'Course not found.' });
+        }
+
+        // --- Authorization Check ---
+        let isAllowed = false;
+        if (userRole === 'admin') {
+            isAllowed = true; // Admins can see any course
+            console.log("Access granted: User is admin.");
+        } else if (userRole === 'user' && studentPlan) {
+            // Check student plan against course accessType (cascading)
+             const courseAccess = course.accessType.toLowerCase();
+             if (course.status !== 'published') {
+                 console.log("Access denied: Course is not published.");
+             } else if (courseAccess === studentPlan) {
+                 isAllowed = true;
+             } else if (studentPlan === 'classic' && courseAccess === 'basic') {
+                 isAllowed = true;
+             } else if (studentPlan === 'pro' && (courseAccess === 'basic' || courseAccess === 'classic')) {
+                 isAllowed = true;
+             }
+              console.log(`Access check: Student plan '${studentPlan}', Course access '${courseAccess}', Published: ${course.status === 'published'}, Allowed: ${isAllowed}`);
+        } else {
+             // Unknown role or student missing plan
+             console.log("Access denied: Unknown role or missing plan.");
+         }
+
+        if (!isAllowed) {
+            return res.status(403).json({ message: 'You are not authorized to access this course.' });
+        }
+        // --- End Authorization Check ---
+
+
+        // If allowed, send the full course object
+        // For students, we don't need to filter anything out here (no answers like quizzes)
+        console.log("Access granted. Sending course details.");
+        res.status(200).json(course);
+
+    } catch (error) {
+        console.error(`Error fetching course ${id}:`, error);
+        res.status(500).json({ message: 'Server error fetching course details.', error: error.message });
+    }
+});
+
+router.get('/course-progress/:courseId', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+    const studentId = req.user?._id;
+
+    console.log(`--- Request: GET /api/student/course-progress/${courseId} ---`);
+    console.log(`User: ${req.user?.email}`);
+
+    if (!mongoose.Types.ObjectId.isValid(courseId))  return res.status(400).json({ message: 'Invalid Course or Lesson ID format.' });
+    if (!studentId) return res.status(401).json({ message: 'Invalid StudentID format.' });
+    try {
+        // Find progress, select only completed lessons array
+        const progress = await AICourseProgress.findOne({ student: studentId, course: courseId })
+            .select('completedLessons lastAccessedLesson') // Select relevant fields
+            .lean();
+
+        if (progress) {
+            console.log("Found course progress:", progress);
+            res.status(200).json({ progress: progress });
+        } else {
+            console.log("No progress found for this course/student.");
+            // Return default structure if no progress yet
+            res.status(200).json({ progress: { completedLessons: [], lastAccessedLesson: null } });
+        }
+    } catch (error) {
+        console.error(`Server Error fetching course progress for course ${courseId}, student ${studentId}:`, error);
+        res.status(500).json({ message: 'Server error fetching course progress.', error: error.message });
+    }
+});
+
+
+// --- !!! NEW ROUTE: POST /api/student/courses/progress !!! ---
+
+router.post('/courses/progress', verifyToken, async (req, res) => {
+    const studentId = req.user?._id;
+    const { courseId, lessonId } = req.body; // Expect courseId and lessonId in body
+
+    console.log(`--- Request: POST /api/student/courses/progress ---`);
+    console.log(`User: ${req.user?.email}, Course: ${courseId}, Lesson: ${lessonId}`);
+
+    // Validation
+    if (!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(lessonId)) {
+        return res.status(400).json({ message: 'Invalid Course or Lesson ID format.' });
+    }
+     if (!studentId)  return res.status(401).json({ message: 'Invalid Student ID format.' });
+
+    try {
+        // Optional: Verify the lesson actually belongs to the course? (more robust)
+        // const course = await AICourse.findOne({ _id: courseId, "modules.lessons._id": lessonId });
+        // if (!course) return res.status(404).json({ message: 'Lesson not found within the specified course.' });
+
+        // Find existing progress or create if not found, then update
+        const updatedProgress = await AICourseProgress.findOneAndUpdate(
+            { student: studentId, course: courseId }, // Find criteria
+            {
+                // Update operations
+                $addToSet: { completedLessons: lessonId }, // Add lessonId only if not already present
+                $set: { lastAccessedLesson: lessonId } // Update last accessed
+            },
+            {
+                new: true,    // Return the updated document
+                upsert: true, // Create the document if it doesn't exist
+                runValidators: true, // Run schema validation
+                setDefaultsOnInsert: true // Apply schema defaults on creation
+            }
+        ).select('completedLessons lastAccessedLesson').lean(); // Select updated fields
+
+        console.log("Course progress updated/created:", updatedProgress);
+        res.status(200).json({
+            message: "Progress updated successfully.",
+            progress: updatedProgress // Send back updated progress state
+        });
+
+    } catch (error) {
+         console.error(`Server Error updating course progress for course ${courseId}, lesson ${lessonId}, student ${studentId}:`, error);
+         res.status(500).json({ message: 'Server error updating course progress.', error: error.message });
+    }
+});
 
 
 module.exports = router;

@@ -3,20 +3,11 @@ const express = require('express');
 const router = express.Router();
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Import middleware (adjust path as needed)
 const { verifyToken, isAdmin } = require('./authRoutes');
-
-// Load environment variables
 dotenv.config();
-
-// --- Configure Google AI ---
-// Ensure API key is loaded from .env
 const geminiApiKey = process.env.GEMINI_API_KEY;
 if (!geminiApiKey) {
     console.error("FATAL ERROR: GEMINI_API_KEY is not defined in .env file.");
-    // Optionally exit or prevent routes from being used
-    // process.exit(1); // Or handle more gracefully
 }
 const genAI = new GoogleGenerativeAI(geminiApiKey);
 // const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" }); // Use a suitable model
@@ -24,7 +15,6 @@ const genAI = new GoogleGenerativeAI(geminiApiKey);
 
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 console.log("Using Gemini Model: gemini-1.5-flash-latest");
-// --- Helper to attempt JSON parsing ---
 function tryParseJson(text) {
     if (!text || typeof text !== 'string') {
         console.error("tryParseJson: Input text is empty or not a string.");
@@ -37,11 +27,9 @@ function tryParseJson(text) {
         const arrayEnd = text.lastIndexOf(']');
 
         let jsonText = null;
-         // Prioritize finding an object first, then an array
          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
             jsonText = text.substring(jsonStart, jsonEnd + 1);
         } else if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
-            // Fallback if the main structure is an array (less likely for our prompt)
             jsonText = text.substring(arrayStart, arrayEnd + 1);
         }
         if (!jsonText) {
@@ -54,7 +42,6 @@ function tryParseJson(text) {
 
     } catch (e) {
         console.error("tryParseJson: JSON.parse failed:", e);
-        // Log the text that caused the error, both raw and potentially extracted
         console.log("Raw AI Text causing parse error:", text);
         // If jsonText was extracted, log that too: console.log("Extracted text causing parse error:", jsonText);
         return null; // Return null on failure
@@ -66,8 +53,6 @@ function tryParseJson(text) {
 router.post('/generate-course-outline', verifyToken, isAdmin, async (req, res) => {
     console.log("--- Request: POST /api/ai/generate-course-outline ---");
     const { topic, targetAudience = 'general', numModules = 5, includeVideos = true, targetPlanSuggestion = 'basic' } = req.body;
-
-    // 1. Basic Input Validation
     if (!topic || topic.trim().length < 3) {
         return res.status(400).json({ message: "Please provide a valid topic (at least 3 characters)." });
     }
@@ -77,10 +62,6 @@ router.post('/generate-course-outline', verifyToken, isAdmin, async (req, res) =
     }
 
     console.log(`Generating outline for Topic: "${topic}", Audience: ${targetAudience}, Modules: ${moduleCount}, Videos: ${includeVideos}, Plan Suggestion: ${targetPlanSuggestion}`);
-
-    // 2. --- Construct the Prompt ---
-    // This is crucial for getting good results. Be specific!
-    // Ask for JSON output directly in the prompt.
     const prompt = `
         Generate a course outline about "${topic}" suitable for a ${targetAudience} audience, targeting educational plan level "${targetPlanSuggestion}".
         The course should have exactly ${moduleCount} modules.
@@ -110,26 +91,18 @@ router.post('/generate-course-outline', verifyToken, isAdmin, async (req, res) =
     `;
 
     console.log("--- Sending Prompt to AI ---");
-    // console.log(prompt); // Optionally log the full prompt for debugging
-
-    // 3. --- Call the AI API ---
     try {
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const aiText = response.text();
         console.log("--- Received RAW AI Response Text (first 500 chars): ---");
         console.log(aiText.substring(0, 500) + (aiText.length > 500 ? "..." : ""));
-        // console.log(aiText); // Log raw response for debugging
-
-        // 4. --- Parse and Validate the Response ---
         const parsedData = tryParseJson(aiText);
 
         if (!parsedData || !parsedData.modules || !Array.isArray(parsedData.modules)) {
             console.error("AI response was null after parsing or missing 'modules' array.");
             return res.status(500).json({ message: "AI failed to generate a valid course structure. Please check logs or try again." });
         }
-
-        // ... basic structure validation (module count check) ...
         console.log("--- Successfully Parsed AI Response ---");
         // Basic validation of structure (can add more checks)
         if (parsedData.modules.length !== moduleCount) {
@@ -138,11 +111,8 @@ router.post('/generate-course-outline', verifyToken, isAdmin, async (req, res) =
          }
 
         console.log("--- Parsed AI Response ---");
-        console.log(JSON.stringify(parsedData, null, 2)); // Log the parsed JSON
-
-        // 5. --- Send Preview Back to Frontend ---
-        res.status(200).json({ courseOutline: parsedData }); // Send the structured outline
-
+        console.log(JSON.stringify(parsedData, null, 2)); 
+        res.status(200).json({ courseOutline: parsedData }); 
     } catch (error) {
         console.error("Error calling Generative AI API:", error);
         // Handle specific API errors if possible (e.g., rate limits, API key issues)
@@ -155,9 +125,6 @@ router.post('/generate-course-outline', verifyToken, isAdmin, async (req, res) =
         res.status(502).json({ message: errorMessage, error: error.message }); // 502 Bad Gateway often used for upstream errors
     }
 });
-
-// --- POST /api/courses (Route to save the final edited course - Add Later) ---
-// This route will receive the manually edited JSON from the frontend
 
 
 module.exports = router;
