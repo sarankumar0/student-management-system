@@ -82,10 +82,10 @@ export default function ContactPage() {
         <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col gap-4">
         <iframe
           className="h-full rounded-lg shadow-lg"
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3151.8354345093747!2d144.95373631531666!3d-37.81627974202154!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6ad642af0f11fd81%3A0x5045675218ce7e33!2sMelbourne%20VIC%2C%20Australia!5e0!3m2!1sen!2sin!4v1602583751042!5m2!1sen!2sin"
+          // src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3151.8354345093747!2d144.95373631531666!3d-37.81627974202154!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6ad642af0f11fd81%3A0x5045675218ce7e33!2sMelbourne%20VIC%2C%20Australia!5e0!3m2!1sen!2sin!4v1602583751042!5m2!1sen!2sin"
           allowFullScreen=""
           loading="lazy"
-        ></iframe>
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3935.4399821072866!2d77.76849727502432!3d9.470404590609625!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3b06cf005974e399%3A0xe3bab55ba785b3a0!2sSkillmine%20Technology%20Consulting%20Pvt%20Ltd%2C%20Sivakasi!5e0!3m2!1sen!2sin!4v1746594865067!5m2!1sen!2sin" ></iframe>
       </div>
         </div>
 

@@ -74,3 +74,277 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
+====================================================================================
+Okay, this is a significant and very useful feature: Notifying eligible students when a new AI-generated course (or any new course/assignment/quiz) becomes available for their plan.
+
+This involves backend work to trigger the notification after a course is successfully saved and its status is set to published.
+
+Method Options:
+
+Email Notifications (More Common & Easier to Start):
+
+Use nodemailer (which you already have in your project for welcome emails).
+
+When an admin saves a course and sets its status to 'published' (either during initial save or by updating it later), the backend would:
+
+Determine the accessType (plan) of the course.
+
+Find all User documents where role: 'user' and plan matches the course's accessType (and lower plans if cascading access applies to these notifications).
+
+Iterate through these users and send them an email.
+
+WhatsApp Notifications (More Complex):
+
+Requires using a WhatsApp Business API provider (e.g., Twilio API for WhatsApp, Meta's Cloud API via a Business Solution Provider).
+
+You'd need to get student phone numbers (and consent for WhatsApp messages).
+
+The backend would make an API call to the WhatsApp provider to send the message.
+
+This is generally more involved to set up due to API access, templates, and costs.
+
+Let's Focus on Email Notifications First.
+
+Plan:
+
+Backend - Email Sending Function: Create a reusable function to send a "New Course Available" email.
+
+Backend - Trigger Point: Identify where to call this function. The best place is after a Course document is successfully saved with status: 'published' OR when an existing course's status is updated from 'draft' to 'published'.
+
+Backend - Find Eligible Students: Logic to query the User collection based on the course's accessType.
+
+Step 1: Refine Email Sending Function
+
+We can adapt your existing sendWelcomeEmail logic or create a new one.
+
+Location: Server/Routes/authRoutes.js (where sendWelcomeEmail is) or move to a dedicated utils/emailService.js file for better organization.
+
+Action: Create sendNewCourseNotificationEmail.
+
+// utils/emailService.js (New File or add to existing email logic)
+const nodemailer = require('nodemailer');
+
+// --- Configure Nodemailer Transporter (Same as your welcome email) ---
+const transporter = nodemailer.createTransport({
+    service: "gmail", // Or your email provider
+    auth: {
+        user: process.env.EMAIL_USER, // STORE IN .ENV
+        pass: process.env.EMAIL_PASS  // STORE IN .ENV
+    }
+});
+
+/**
+ * Sends a "New Course Available" notification email.
+ * @param {string} studentEmail - The email address of the student.
+ * @param {string} studentName - The name of the student.
+ * @param {object} course - The course object (needs title, description).
+ * @param {string} studentPlan - The student's plan.
+ */
+const sendNewCourseNotificationEmail = async (studentEmail, studentName, course, studentPlan) => {
+    const courseLink = `http://localhost:5173/student/course/${course._id}`; // Link to student course viewer
+
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: studentEmail,
+        subject: `🚀 New Course Available for You: ${course.title}!`,
+        html: `
+            <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                <h2 style="color: #4A90E2; text-align: center;">✨ New Course Alert! ✨</h2>
+                <p>Hi ${studentName},</p>
+                <p>Great news! A new course, "<strong>${course.title}</strong>", has just been published and is now available for your <strong>${studentPlan.toUpperCase()}</strong> plan.</p>
+                ${course.description ? `<p><strong>Description:</strong> ${course.description.substring(0, 150)}${course.description.length > 150 ? '...' : ''}</p>` : ''}
+                <p>We think you'll find it valuable for your learning journey.</p>
+                <p style="text-align: center; margin-top: 25px; margin-bottom: 25px;">
+                    <a href="${courseLink}" style="background-color: #4A90E2; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px;">
+                        Start Learning Now
+                    </a>
+                </p>
+                <p>Happy learning!</p>
+                <p style="text-align: center; margin-top: 20px;">
+                    Best Regards,<br/>
+                    <strong>The Oxford Team</strong>
+                </p>
+            </div>
+        `,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`📧 New course notification sent to ${studentEmail} for course "${course.title}"`);
+    } catch (error) {
+        console.error(`🚨 Error sending new course notification to ${studentEmail}:`, error);
+        // Don't let email failure stop the main API response
+    }
+};
+
+module.exports = { /* ... other email functions ..., */ sendNewCourseNotificationEmail };
+
+// Add to .env:
+// EMAIL_USER=your_gmail_address@gmail.com
+// EMAIL_PASS=your_gmail_app_password
+
+
+Step 2: Modify Backend Course Save/Update Routes to Trigger Notifications
+
+Location: Server/Routes/aiCourseRoutes.js (or courseRoutes.js).
+
+Action: In POST / (create) and PATCH /:id (update), after successfully saving/updating a course, if its status is 'published', fetch eligible students and send emails.
+
+// Routes/aiCourseRoutes.js
+
+// ... imports (express, mongoose, Course model, middleware) ...
+const User = require('../models/User'); // Import User model
+const { sendNewCourseNotificationEmail } = require('../utils/emailService'); // Adjust path if needed
+
+// --- Helper function to find and notify students ---
+async function notifyEligibleStudents(course) {
+    if (!course || course.status !== 'published' || !course.accessType) {
+        console.log("Notification not sent: Course not published or accessType missing.");
+        return;
+    }
+
+    console.log(`Course "${course.title}" published. Finding eligible students for plan(s): ${course.accessType}...`);
+    const coursePlan = course.accessType.toLowerCase();
+    let studentPlanFilter = {};
+
+    if (coursePlan === 'basic') {
+        studentPlanFilter = { plan: { $in: ['basic', 'classic', 'pro'] } }; // Basic course is seen by all
+    } else if (coursePlan === 'classic') {
+        studentPlanFilter = { plan: { $in: ['classic', 'pro'] } }; // Classic course by Classic & Pro
+    } else if (coursePlan === 'pro') {
+        studentPlanFilter = { plan: 'pro' }; // Pro course only by Pro
+    } else {
+        console.warn("Unknown accessType for notification:", coursePlan);
+        return;
+    }
+
+    // Find students matching the plan(s)
+    try {
+        const eligibleStudents = await User.find({ role: 'user', ...studentPlanFilter })
+                                          .select('email name plan'); // Select only needed fields
+
+        console.log(`Found ${eligibleStudents.length} eligible students to notify for course "${course.title}".`);
+
+        for (const student of eligibleStudents) {
+            // Call the email function (don't await inside loop to avoid blocking)
+            sendNewCourseNotificationEmail(student.email, student.name, course, student.plan)
+                .catch(err => console.error(`Email sending to ${student.email} in background failed:`, err));
+        }
+    } catch (dbError) {
+        console.error("Error fetching students for course notification:", dbError);
+    }
+}
+
+
+// --- POST / (Create New Course) ---
+router.post('/', verifyToken, isAdmin, uploadThumbnail.single('thumbnailFile'), async (req, res) => {
+    // ... (parsing req.body.courseData, validation) ...
+    try {
+        // ... (newCourseData setup) ...
+        const newCourse = new Course(newCourseData);
+        const savedCourse = await newCourse.save();
+        console.log("Course saved successfully:", savedCourse._id);
+
+        // --- Trigger Notification if Published ---
+        if (savedCourse.status === 'published') {
+            notifyEligibleStudents(savedCourse); // Call the notification helper
+        }
+        // --- End Notification ---
+
+        res.status(201).json(savedCourse);
+    } catch (error) { /* ... error handling ... */ }
+});
+
+
+// --- PATCH /:id (Update Course) ---
+router.patch('/:id', verifyToken, isAdmin, uploadThumbnail.single('thumbnailFile'), async (req, res) => {
+    // ... (parsing req.body.courseData, validation, find courseToUpdate) ...
+    try {
+        // ... (updateData setup, file handling) ...
+
+        // Store status before update to check if it changed to 'published'
+        const oldStatus = courseToUpdate.status;
+
+        const updatedCourse = await Course.findByIdAndUpdate(
+            id, { $set: updateData }, { new: true, runValidators: true }
+        );
+
+        if (!updatedCourse) return res.status(404).json({message: 'Course not found after update attempt'}); // Should not happen
+
+        console.log("Course updated successfully:", updatedCourse._id);
+
+        // --- Trigger Notification if status changed to 'published' ---
+        if (updatedCourse.status === 'published' && oldStatus !== 'published') {
+            notifyEligibleStudents(updatedCourse); // Call notification helper
+        }
+        // --- End Notification ---
+
+        // ... (delete old thumbnail if new one uploaded) ...
+        res.status(200).json(updatedCourse);
+    } catch (error) { /* ... error handling ... */ }
+});
+
+// ... other routes (GET, DELETE) ...
+module.exports = router;
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+JavaScript
+IGNORE_WHEN_COPYING_END
+
+Explanation of Changes:
+
+emailService.js:
+
+Created a new sendNewCourseNotificationEmail function.
+
+Constructs an email with a link to the student course viewer page (http://localhost:5173/student/course/${course._id}). You'll need to ensure this student-side route exists.
+
+aiCourseRoutes.js:
+
+Imports User model and sendNewCourseNotificationEmail.
+
+notifyEligibleStudents Helper:
+
+Takes a course object as input.
+
+Checks if course.status is 'published'.
+
+Determines student eligibility: This is slightly different from content access. If a 'basic' course is published, all students (basic, classic, pro) should probably be notified because they can access it. If a 'classic' course is published, 'classic' and 'pro' students are notified. If 'pro' course, only 'pro' students. Adjust this logic if your notification rules are different.
+
+Fetches users matching the criteria.
+
+Loops through eligible students and calls sendNewCourseNotificationEmail. The email sending is done without await inside the loop to prevent the API response from being blocked if many emails need to be sent. Errors are caught and logged.
+
+POST / (Create): After savedCourse, if savedCourse.status === 'published', it calls notifyEligibleStudents(savedCourse).
+
+PATCH /:id (Update):
+
+It captures the oldStatus of the course before updating.
+
+After a successful update, it checks if updatedCourse.status === 'published' AND oldStatus !== 'published'. This ensures notifications are sent only when a course becomes published, not every time a published course is edited.
+
+Calls notifyEligibleStudents(updatedCourse).
+
+Before Testing:
+
+Create utils/emailService.js (or add to existing email utility).
+
+Ensure EMAIL_USER and EMAIL_PASS (an app password for Gmail) are in your .env file.
+
+Update aiCourseRoutes.js with the new helper and the calls within POST/PATCH. Import User and sendNewCourseNotificationEmail.
+
+Restart your backend server.
+
+Testing:
+
+Create a new AI course and ensure its final "Access Type" is set and its "Status" is set to "Published" (either by default or ensure your save logic does this if your editor doesn't have a status field).
+
+OR, take an existing 'draft' course, edit it, and change its status to 'published'.
+
+Check the backend console logs for "Finding eligible students..." and "New course notification sent to...".
+
+Check the student email accounts that match the eligibility criteria.
+
+This implements email notifications. WhatsApp is a bigger step involving third-party APIs.

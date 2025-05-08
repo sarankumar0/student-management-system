@@ -6,11 +6,14 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const axios = require('axios'); // For making HTTP request to n8n
+const dotenv = require('dotenv');
 
+dotenv.config();
 // --- Models & Middleware ---
 const Course = require('../models/AI_courses'); // Using your existing model name
 const { verifyToken, isAdmin } = require('./authRoutes'); // Using your existing auth path
-
+const N8N_NEW_COURSE_WEBHOOK_URL = 'https://saran10.app.n8n.cloud/webhook-test/new-course-notify';
 // --- Multer Setup for Course Thumbnails ---
 const thumbnailStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -22,6 +25,38 @@ const thumbnailStorage = multer.diskStorage({
         cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'));
     }
 });
+
+// --- Helper function to trigger n8n webhook ---
+async function triggerNewCourseNotificationWorkflow(course) {
+    if (!N8N_NEW_COURSE_WEBHOOK_URL) {
+        console.warn("N8N_NEW_COURSE_WEBHOOK_URL not set in .env. Skipping n8n notification.");
+        return;
+    }
+    if (!course || course.status !== 'published' || !course.accessType) {
+        console.log("Notification not sent to n8n: Course not published or accessType missing.");
+        return;
+    }
+
+    const payload = {
+        courseId: course._id,
+        courseTitle: course.title,
+        courseDescription: course.description,
+        courseAccessType: course.accessType.toLowerCase(), // e.g., 'basic', 'classic', 'pro'
+        courseLink: `http://localhost:5173/student/course/${course._id}` // Student-facing link
+        // Add any other relevant data n8n might need
+    };
+
+    console.log(`Triggering n8n workflow for new/published course: ${course.title}`);
+    try {
+        // Make a POST request to the n8n webhook URL
+        await axios.post(N8N_NEW_COURSE_WEBHOOK_URL, payload);
+        console.log(`Successfully triggered n8n workflow for course: ${course.title}`);
+    } catch (error) {
+        console.error(`Error triggering n8n workflow for course ${course.title}:`,
+            error.response ? error.response.data : error.message);
+        // Decide if this error should affect the API response to the admin
+    }
+}
 
 const imageFileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -37,80 +72,190 @@ const uploadThumbnail = multer({
     limits: { fileSize: 1024 * 1024 * 5 } // 5MB limit
 });
 
-router.post('/',verifyToken,isAdmin,uploadThumbnail.single('thumbnailFile'),
+// router.post('/',verifyToken,isAdmin,uploadThumbnail.single('thumbnailFile'),
+//     async (req, res) => {
+//         console.log("--- Request: POST /api/courses ---");
+//         console.log("Request Body:", req.body);
+//         console.log("Request File (Thumbnail):", req.file);
+
+//         // Parse course data (handles both FormData and regular JSON)
+//         let courseData;
+//         try {
+//             const newCourseData = {
+//                 title, description, accessType, status, modules,
+//                 createdBy: req.user._id
+//             };
+//             if (req.file) {
+//                 newCourseData.thumbnailUrl = `/uploads/course_thumbnails/${req.file.filename}`;
+//                 console.log("Thumbnail uploaded, saving path:", newCourseData.thumbnailUrl);
+//             }
+//             if (req.body.courseData) {
+//                 courseData = JSON.parse(req.body.courseData);
+//             } else {
+//                 courseData = req.body;
+//             }
+//             const newCourse = new Course(newCourseData);
+//             const savedCourse = await newCourse.save();
+//             console.log("Course saved successfully:", savedCourse._id);
+    
+//             // --- Trigger Notification if Published ---
+//             if (savedCourse.status === 'published') {
+//                 triggerNewCourseNotificationWorkflow(savedCourse); 
+//             }
+//             res.status(201).json(savedCourse);
+//         } catch (parseError) {
+//             console.error("Error parsing course data:", parseError);
+//             if (req.file) fs.unlink(req.file.path, err => {});
+//             return res.status(400).json({ message: "Invalid format for course data." });
+//         }
+
+//         const {
+//             title, // courseTitle from frontend
+//             description, // courseDescription from frontend
+//             accessType,
+//             status = 'published',
+//             modules
+//         } = courseData;
+
+//         // Basic Validation (keep your existing validation)
+//         if (!title || !accessType || !modules || !Array.isArray(modules)) {
+//             if (req.file) fs.unlink(req.file.path, err => {});
+//             return res.status(400).json({ message: 'Missing required fields: title, accessType, and modules are required.' });
+//         }
+
+//         try {
+//             // Create new course with thumbnail if provided
+//             const newCourseData = {
+//                 title,
+//                 description,
+//                 accessType,
+//                 status,
+//                 modules,
+//                 createdBy: req.user._id
+//             };
+
+//             // Add thumbnail URL if file was uploaded
+//             if (req.file) {
+//                 newCourseData.thumbnailUrl = `/uploads/course_thumbnails/${req.file.filename}`;
+//                 console.log("Thumbnail uploaded:", newCourseData.thumbnailUrl);
+//             }
+
+//             const newCourse = new Course(newCourseData);
+//             const savedCourse = await newCourse.save();
+
+//             console.log("Course saved successfully:", savedCourse._id);
+//             res.status(201).json(savedCourse);
+
+//         } catch (error) {
+//             console.error("Error saving course:", error);
+//             // Clean up uploaded file if error occurs
+//             if (req.file) {
+//                 fs.unlink(req.file.path, err => {
+//                     if (err) console.error("Error deleting uploaded thumbnail:", err);
+//                 });
+//             }
+
+//             if (error.name === 'ValidationError') {
+//                 const messages = Object.values(error.errors).map(err => err.message);
+//                 return res.status(400).json({ message: "Validation failed", errors: messages });
+//             }
+//             res.status(500).json({ message: 'Server error saving course.', error: error.message });
+//         }
+//     }
+// );
+
+router.post(
+    '/',
+    verifyToken,
+    isAdmin,
+    uploadThumbnail.single('thumbnailFile'), // Handles 'thumbnailFile' if sent
     async (req, res) => {
-        console.log("--- Request: POST /api/courses ---");
-        console.log("Request Body:", req.body);
-        console.log("Request File (Thumbnail):", req.file);
+        console.log("--- Request: POST /api/ai-courses ---");
+        console.log("Request Body (from multer/parser):", req.body);
+        console.log("Request File (Thumbnail from multer):", req.file);
 
-        // Parse course data (handles both FormData and regular JSON)
-        let courseData;
+        let parsedCourseData; // This will hold the main course data (title, modules etc.)
+
         try {
-            if (req.body.courseData) {
-                courseData = JSON.parse(req.body.courseData);
-            } else {
-                courseData = req.body;
+            // --- Step 1: Extract and Parse Course Data ---
+            // If frontend sends FormData, all text fields (including JSON string) are in req.body
+            if (req.body.courseData && typeof req.body.courseData === 'string') {
+                console.log("Attempting to parse req.body.courseData JSON string...");
+                parsedCourseData = JSON.parse(req.body.courseData);
+            } else if (typeof req.body === 'object' && Object.keys(req.body).length > 0 && !req.body.courseData) {
+                 // If no 'courseData' field but body has data, assume it's already parsed JSON (e.g., if no file was sent)
+                 console.log("Using req.body directly as parsedCourseData (no file or courseData field).");
+                 parsedCourseData = req.body;
+             } else {
+                 console.error("Critical: No 'courseData' field found in request, or req.body is empty.");
+                 if (req.file) fs.unlink(req.file.path, err => { if(err) console.warn("Failed to clean up uploaded thumbnail after data error."); });
+                 return res.status(400).json({ message: "Missing or malformed course data in request." });
+             }
+
+            console.log("Parsed Course Data:", parsedCourseData);
+            const { title, description, accessType, status = 'published', modules } = parsedCourseData;
+
+            // Basic Validation on parsed data
+            if (!title || !accessType || !modules || !Array.isArray(modules)) {
+                if (req.file) fs.unlink(req.file.path, err => {});
+                return res.status(400).json({ message: 'Parsed data missing required fields: title, accessType, modules.' });
             }
-        } catch (parseError) {
-            console.error("Error parsing course data:", parseError);
-            if (req.file) fs.unlink(req.file.path, err => {});
-            return res.status(400).json({ message: "Invalid format for course data." });
-        }
 
-        const {
-            title, // courseTitle from frontend
-            description, // courseDescription from frontend
-            accessType,
-            status = 'published',
-            modules
-        } = courseData;
-
-        // Basic Validation (keep your existing validation)
-        if (!title || !accessType || !modules || !Array.isArray(modules)) {
-            if (req.file) fs.unlink(req.file.path, err => {});
-            return res.status(400).json({ message: 'Missing required fields: title, accessType, and modules are required.' });
-        }
-
-        try {
-            // Create new course with thumbnail if provided
-            const newCourseData = {
+            // --- Step 2: Construct Object for Mongoose Model ---
+            const dataForModel = { // Use a different variable name to avoid confusion
                 title,
                 description,
                 accessType,
                 status,
-                modules,
+                modules, // modules array should have correct structure (title, order, lessons: [{title, order,...}])
                 createdBy: req.user._id
             };
 
-            // Add thumbnail URL if file was uploaded
             if (req.file) {
-                newCourseData.thumbnailUrl = `/uploads/course_thumbnails/${req.file.filename}`;
-                console.log("Thumbnail uploaded:", newCourseData.thumbnailUrl);
+                dataForModel.thumbnailUrl = `/uploads/course_thumbnails/${req.file.filename}`;
+                console.log("Thumbnail uploaded, saving path:", dataForModel.thumbnailUrl);
             }
 
-            const newCourse = new Course(newCourseData);
+            // --- Step 3: Save to Database ---
+            const newCourse = new Course(dataForModel); // Pass the structured data
+            console.log("Attempting to save new course:", newCourse.title);
             const savedCourse = await newCourse.save();
-
             console.log("Course saved successfully:", savedCourse._id);
+
+            // --- Step 4: Trigger Notification (if applicable) ---
+            if (savedCourse.status === 'published') {
+                triggerNewCourseNotificationWorkflow(savedCourse);
+            }
+
             res.status(201).json(savedCourse);
 
+        // --- CATCH BLOCK for TRY ---
         } catch (error) {
-            console.error("Error saving course:", error);
-            // Clean up uploaded file if error occurs
-            if (req.file) {
-                fs.unlink(req.file.path, err => {
-                    if (err) console.error("Error deleting uploaded thumbnail:", err);
+            console.error("Error during course creation/saving:", error);
+
+            // Clean up uploaded file if one exists and an error occurred
+            if (req.file && req.file.path) {
+                fs.unlink(req.file.path, (err) => {
+                    if (err) console.error("Error deleting uploaded thumbnail after main error:", err);
+                    else console.log("Cleaned up uploaded thumbnail due to error.");
                 });
             }
 
+            // Specific Error Handling
+            if (error instanceof SyntaxError && error.message.includes("JSON.parse")) {
+                 // Error was from JSON.parse(req.body.courseData)
+                 return res.status(400).json({ message: "Invalid JSON format for course data.", details: error.message });
+             }
             if (error.name === 'ValidationError') {
                 const messages = Object.values(error.errors).map(err => err.message);
-                return res.status(400).json({ message: "Validation failed", errors: messages });
+                return res.status(400).json({ message: "Course validation failed", errors: messages });
             }
+            // Generic server error
             res.status(500).json({ message: 'Server error saving course.', error: error.message });
         }
     }
 );
+
 router.get('/', verifyToken, isAdmin, async (req, res) => {
     console.log("--- Request: GET /api/ai-courses ---");
     try {
@@ -146,11 +291,7 @@ router.get('/:id', verifyToken,  async (req, res) => {
         res.status(500).json({ message: 'Server error fetching course details.', error: error.message });
     }
 });
-router.patch(
-    '/:id',
-    verifyToken,
-    isAdmin,
-    uploadThumbnail.single('thumbnailFile'), // Handle optional thumbnail replacement
+router.patch('/:id',verifyToken,isAdmin,uploadThumbnail.single('thumbnailFile'), 
     async (req, res) => {
         const { id } = req.params;
         console.log(`--- Request: PATCH /api/ai-courses/${id} ---`);
@@ -170,6 +311,18 @@ router.patch(
              } else { // Assume JSON body if no file potentially
                  courseUpdateData = req.body;
               }
+              const oldStatus = courseToUpdate.status;
+              const updatedCourse = await Course.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true });
+              if (!updatedCourse) { /* ... handle not found ... */ }
+              console.log("Course updated successfully:", updatedCourse._id);
+      
+              // --- Trigger Notification if status changed to 'published' ---
+              if (updatedCourse.status === 'published' && oldStatus !== 'published') {
+                  triggerNewCourseNotificationWorkflow(updatedCourse); // Fire and forget
+              }
+              // --- End Notification ---
+      
+              res.status(200).json(updatedCourse);
          } catch (parseError) {
              console.error("Error parsing course data from PATCH request body:", parseError);
              if (req.file) fs.unlink(req.file.path, err => {});

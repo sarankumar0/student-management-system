@@ -130,14 +130,14 @@ const  aiCourseRoutes=require('./Routes/aiCourseRoutes');
 const CourseMaterial = require("./models/courseMaterial"); // Keep if used below
 const Video = require("./models/video"); // Keep if used below
 const authRoutes = require("./Routes/authRoutes");
-
+const n8nHelperRoutes = require('./Routes/n8nHelperRoutes');
 
 // --- Initialize Express App ---
 const app = express();
 
 // --- Core Middleware ---
 app.use(cors({
-  origin: ["http://localhost:5173", "http://localhost:5174"],
+  origin: ["http://localhost:5173", "http://localhost:5174", 'https://saran10.app.n8n.cloud'],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -164,7 +164,7 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/ai', aiGenerationRoutes); // <-- Mount AI generation routes
 app.use('/api/courses', courseAdminRoutes); // <-- Mount course admin routes
 app.use('/api/ai-courses', aiCourseRoutes);
-
+app.use('/api/internal', n8nHelperRoutes);
 // --- Keep Your Direct Route Definitions ---
 const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key"; // Keep
 
